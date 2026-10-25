@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ThreeDmolAdapter } from "./ThreeDmolAdapter";
 
 interface Props {
@@ -10,12 +10,21 @@ interface Props {
 export default function MoleculeView({ sdf, highlight }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const adapter = useRef<ThreeDmolAdapter | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
 
   useEffect(() => {
     const el = container.current;
     if (!el) return;
-    const a = new ThreeDmolAdapter(el);
+    let a: ThreeDmolAdapter;
+    try {
+      a = new ThreeDmolAdapter(el);
+    } catch (err) {
+      console.error("Molecule viewer unavailable", err);
+      setFailed(err instanceof Error ? err.message : "Viewer failed to start");
+      return;
+    }
     adapter.current = a;
+    setFailed(null);
     const observer = new ResizeObserver(() => a.resize());
     observer.observe(el);
     return () => {
@@ -26,8 +35,13 @@ export default function MoleculeView({ sdf, highlight }: Props) {
   }, []);
 
   useEffect(() => {
-    adapter.current?.load(sdf);
-    adapter.current?.setHighlight(highlight);
+    try {
+      adapter.current?.load(sdf);
+      adapter.current?.setHighlight(highlight);
+    } catch (err) {
+      console.error("Molecule failed to render", err);
+      setFailed("This molecule could not be drawn");
+    }
     // highlight is applied again by the effect below when only it changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sdf]);
@@ -39,6 +53,12 @@ export default function MoleculeView({ sdf, highlight }: Props) {
   return (
     <div className="viewer-wrap">
       <div ref={container} className="viewer" />
+      {failed && (
+        <p className="error viewer-error">
+          3D view unavailable ({failed}). The highlight is still verified; check
+          that hardware acceleration/WebGL is on in this browser.
+        </p>
+      )}
       <button
         type="button"
         className="secondary reset"

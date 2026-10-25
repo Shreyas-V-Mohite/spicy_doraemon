@@ -3,13 +3,25 @@ import type { ViewerAdapter } from "./ViewerAdapter";
 
 const HIGHLIGHT = "#ffb000";
 
+export function webglAvailable(): boolean {
+  try {
+    const canvas = document.createElement("canvas");
+    return !!(canvas.getContext("webgl2") || canvas.getContext("webgl"));
+  } catch {
+    return false;
+  }
+}
+
 export class ThreeDmolAdapter implements ViewerAdapter {
   private container: HTMLElement;
   private viewer: $3Dmol.GLViewer;
   private hasModel = false;
   private highlight: readonly number[] | null = null;
 
+  // Throws if the browser can't give us a WebGL context; callers show a
+  // message instead of letting the error unmount the page.
   constructor(container: HTMLElement) {
+    if (!webglAvailable()) throw new Error("WebGL is not available");
     this.container = container;
     this.viewer = $3Dmol.createViewer(container, { backgroundAlpha: 0 });
   }
@@ -43,6 +55,11 @@ export class ThreeDmolAdapter implements ViewerAdapter {
 
   destroy() {
     this.viewer.clear();
+    // Browsers cap live WebGL contexts (about 16); release ours explicitly.
+    const gl = this.container
+      .querySelector("canvas")
+      ?.getContext("webgl2") ?? this.container.querySelector("canvas")?.getContext("webgl");
+    gl?.getExtension("WEBGL_lose_context")?.loseContext();
     this.container.replaceChildren();
   }
 

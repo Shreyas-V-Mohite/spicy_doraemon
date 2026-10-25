@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router-dom";
 import { StoreContext } from "./store/sessionStore";
 import { useConvexStore } from "./store/convexStore";
+import ErrorBoundary from "./ErrorBoundary";
 import Home from "./views/Home";
 import ProfessorStart from "./views/ProfessorStart";
 import Professor from "./views/Professor";
@@ -11,6 +12,7 @@ export default function App() {
   const store = useConvexStore();
   return (
     <StoreContext.Provider value={store}>
+      <ErrorBoundary>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/professor" element={<ProfessorStart />} />
@@ -19,6 +21,7 @@ export default function App() {
         <Route path="/present/:code" element={<Presentation />} />
         <Route path="*" element={<Home />} />
       </Routes>
+      </ErrorBoundary>
     </StoreContext.Provider>
   );
 }

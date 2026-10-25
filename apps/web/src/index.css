@@ -90,3 +90,4 @@ select { font: inherit; padding: 10px; border-radius: 8px; border: 1px solid var
 .sources { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip { font-size: 0.75rem; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); cursor: help; }
 .pill.cached { color: var(--confused); }
+.viewer-error { margin: 8px 0 0; font-size: 0.85rem; }
