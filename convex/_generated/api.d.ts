@@ -10,8 +10,10 @@
 
 import type * as feedback from "../feedback.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_visual from "../lib/visual.js";
 import type * as questions from "../questions.js";
 import type * as sessions from "../sessions.js";
+import type * as visuals from "../visuals.js";
 
 import type {
   ApiFromModules,
@@ -22,8 +24,10 @@ import type {
 declare const fullApi: ApiFromModules<{
   feedback: typeof feedback;
   "lib/auth": typeof lib_auth;
+  "lib/visual": typeof lib_visual;
   questions: typeof questions;
   sessions: typeof sessions;
+  visuals: typeof visuals;
 }>;
 
 /**

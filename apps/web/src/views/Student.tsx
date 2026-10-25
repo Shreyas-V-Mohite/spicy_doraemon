@@ -8,6 +8,7 @@ import {
   saveMyVote,
 } from "../lib/identity";
 import type { FeedbackValue } from "../types";
+import MoleculeView from "../viewer/MoleculeView";
 
 export default function Student() {
   const { code = "" } = useParams();
@@ -15,6 +16,7 @@ export default function Student() {
   const studentId = getStudentId();
   const session = store.useSession(code);
   const mine = store.useMyQuestions(session?._id, studentId);
+  const visual = store.useCurrentVisual(session?._id);
   const [text, setText] = useState("");
   const [vote, setVote] = useState(getMyVote(code));
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +58,15 @@ export default function Student() {
     <main className="page narrow">
       <h1>{session.topic}</h1>
       <p className="muted">Session {session.code}</p>
+
+      {visual && (
+        <>
+          <p className="muted">
+            {visual.label} in {visual.query}
+          </p>
+          <MoleculeView sdf={visual.sdf} highlight={visual.indices} />
+        </>
+      )}
 
       <div className="row votes">
         <button

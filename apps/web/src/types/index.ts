@@ -17,3 +17,16 @@ export interface FeedbackCounts {
 }
 
 export type FeedbackValue = "confused" | "understood";
+
+export interface Visual {
+  query: string;
+  smiles: string;
+  sdf: string;
+  groupId: string;
+  label: string;
+  indices: number[];
+}
+
+export interface Preview extends Visual {
+  _id: string;
+}

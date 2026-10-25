@@ -3,7 +3,9 @@ import type {
   FeedbackCounts,
   FeedbackValue,
   PublicSession,
+  Preview,
   Question,
+  Visual,
 } from "../types";
 
 // Every read and write of shared classroom state goes through this interface,
@@ -20,6 +22,12 @@ export interface SessionStore {
     studentId: string,
   ): Question[] | undefined;
   useFeedbackCounts(sessionId: string | undefined): FeedbackCounts | undefined;
+  // Public: the visual the professor has published, or null.
+  useCurrentVisual(sessionId: string | undefined): Visual | null | undefined;
+  useProfessorPreviews(
+    sessionId: string | undefined,
+    token: string | null,
+  ): Preview[] | undefined;
 
   createSession(args: {
     passcode: string;
@@ -32,6 +40,18 @@ export interface SessionStore {
     studentId: string;
     value: FeedbackValue;
   }): Promise<void>;
+  buildPreview(args: {
+    sessionId: string;
+    token: string;
+    query: string;
+    groupId: string;
+  }): Promise<string>;
+  publish(args: {
+    sessionId: string;
+    token: string;
+    previewId: string;
+  }): Promise<void>;
+  unpublish(args: { sessionId: string; token: string }): Promise<void>;
   markAnswered(args: {
     sessionId: string;
     token: string;

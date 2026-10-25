@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { visualFields } from "./lib/visual";
 
 export default defineSchema({
   // Public fields are code and topic; tokenHash never leaves the server.
@@ -26,4 +27,10 @@ export default defineSchema({
   })
     .index("by_session", ["sessionId"])
     .index("by_session_and_student", ["sessionId", "studentId"]),
+
+  // Professor only: built from the chemistry service, not yet visible to students.
+  previews: defineTable(visualFields).index("by_session", ["sessionId"]),
+
+  // Public: at most one current visual per session.
+  published_visuals: defineTable(visualFields).index("by_session", ["sessionId"]),
 });

@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { useStore } from "../store/sessionStore";
 import { getProfessorToken } from "../lib/identity";
+import VisualPanel from "./VisualPanel";
 
 export default function Professor() {
   const { code = "" } = useParams();
@@ -97,10 +98,7 @@ export default function Professor() {
         </section>
 
         <section>
-          <h2>Copilot and molecule preview</h2>
-          <p className="muted">
-            Private suggestions and the molecular preview will appear here.
-          </p>
+          <VisualPanel sessionId={session._id} token={token} />
         </section>
       </div>
     </main>
