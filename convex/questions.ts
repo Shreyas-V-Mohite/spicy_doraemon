@@ -105,6 +105,7 @@ export const queue = query({
           answerStatus: a?.status ?? null,
           answerNote: a?.note ?? null,
           answerText: a?.text ?? null,
+          answerConflict: a?.conflict ?? false,
         };
       });
       const open = rows.filter((r) => r.status === "open");
@@ -114,7 +115,9 @@ export const queue = query({
         label: group?.label ?? null,
         studentCount: new Set(members.map((m) => m.studentId)).size,
         open: open.length > 0,
-        flagged: open.some((r) => FLAGGED.has(r.answerStatus ?? "")),
+        flagged: open.some(
+          (r) => FLAGGED.has(r.answerStatus ?? "") || r.answerConflict,
+        ),
         latest: members[0]._creationTime,
         members: rows,
       };

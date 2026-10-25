@@ -8,6 +8,7 @@ import type {
   MyQuestion,
   PublicSession,
   Preview,
+  TranscriptLine,
   QueueCard,
   Visual,
 } from "../types";
@@ -30,6 +31,10 @@ export interface SessionStore {
     sessionId: string | undefined,
     studentId: string,
   ): FeedbackValue | null | undefined;
+  useTranscriptLines(
+    sessionId: string | undefined,
+    token: string | null,
+  ): TranscriptLine[] | undefined;
   // Public: the visual the professor has published, or null.
   useCurrentVisual(sessionId: string | undefined): Visual | null | undefined;
   useProfessorPreviews(
@@ -107,6 +112,29 @@ export interface SessionStore {
   }): Promise<void>;
   unpublish(args: { sessionId: string; token: string }): Promise<void>;
   resetFeedback(args: { sessionId: string; token: string }): Promise<void>;
+  addTranscriptLine(args: {
+    sessionId: string;
+    token: string;
+    text: string;
+  }): Promise<void>;
+  editTranscriptLine(args: {
+    sessionId: string;
+    token: string;
+    lineId: string;
+    text: string;
+  }): Promise<void>;
+  deleteTranscriptLine(args: {
+    sessionId: string;
+    token: string;
+    lineId: string;
+  }): Promise<void>;
+  setTranscribing(args: {
+    sessionId: string;
+    token: string;
+    on: boolean;
+  }): Promise<void>;
+  flushTranscript(args: { sessionId: string; token: string }): Promise<void>;
+  clearTranscript(args: { sessionId: string; token: string }): Promise<void>;
   markGroupAnswered(args: {
     sessionId: string;
     token: string;

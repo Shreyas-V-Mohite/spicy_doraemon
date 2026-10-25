@@ -8,6 +8,10 @@ export default defineSchema({
     code: v.string(),
     topic: v.string(),
     courseId: v.optional(v.id("courses")),
+    // True while the professor's browser is transcribing; students are told.
+    transcribing: v.optional(v.boolean()),
+    // True while a background job is waiting to turn new lines into passages.
+    flushPending: v.optional(v.boolean()),
     // Sessions without a course (created before courses existed) keep their own.
     tokenHash: v.optional(v.string()),
   }).index("by_code", ["code"]),
@@ -108,13 +112,18 @@ export default defineSchema({
     quotes: v.optional(
       v.array(
         v.object({
-          chunkId: v.id("lessonChunks"),
+          source: v.optional(v.union(v.literal("lesson"), v.literal("transcript"))),
+          chunkId: v.optional(
+            v.union(v.id("lessonChunks"), v.id("transcriptChunks")),
+          ),
           label: v.string(),
           text: v.string(),
         }),
       ),
     ),
     note: v.optional(v.string()),
+    // True when the lecture contradicted the lesson (the lesson was used).
+    conflict: v.optional(v.boolean()),
     // Set when the answer was copied from a near-identical earlier question.
     reusedFrom: v.optional(v.id("questions")),
     topScore: v.optional(v.number()),
@@ -124,4 +133,32 @@ export default defineSchema({
   })
     .index("by_question", ["questionId"])
     .index("by_session", ["sessionId"]),
+
+  // What the professor said, one row per finished phrase. Editable.
+  transcriptLines: defineTable({
+    sessionId: v.id("sessions"),
+    courseId: v.id("courses"),
+    text: v.string(),
+    startedAt: v.number(),
+    // Set once the line is part of a searchable chunk.
+    chunkId: v.optional(v.id("transcriptChunks")),
+  })
+    .index("by_session", ["sessionId"])
+    .index("by_chunk", ["chunkId"]),
+
+  // Searchable stretches of lecture (about 60-120 words) with embeddings.
+  transcriptChunks: defineTable({
+    courseId: v.id("courses"),
+    sessionId: v.id("sessions"),
+    text: v.string(),
+    startedAt: v.number(),
+    endedAt: v.number(),
+    embedding: v.array(v.float64()),
+  })
+    .index("by_session", ["sessionId"])
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 1024,
+      filterFields: ["courseId"],
+    }),
 });

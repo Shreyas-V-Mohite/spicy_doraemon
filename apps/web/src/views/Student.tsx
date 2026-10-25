@@ -51,6 +51,12 @@ export default function Student() {
     <main className="page narrow">
       <h1>{session.topic}</h1>
       <p className="muted">Session {session.code}</p>
+      {session.transcribing && (
+        <p className="notice">
+          This lecture is being transcribed (text only, no recording) so your
+          questions can be answered from what is said.
+        </p>
+      )}
 
       {visual && (
         <>

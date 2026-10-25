@@ -3,7 +3,9 @@ import { Link, useParams } from "react-router-dom";
 import { useStore } from "../store/sessionStore";
 import { getCourseToken } from "../lib/identity";
 import type { Question, QueueCard } from "../types";
+import { useTranscription } from "../transcribe/useTranscription";
 import Stage from "./Stage";
+import TranscriptPanel from "./TranscriptPanel";
 import VisualPanel from "./VisualPanel";
 
 const FLAGGED = new Set(["not_covered", "failed"]);
@@ -18,6 +20,23 @@ export default function Professor() {
   const visual = store.useCurrentVisual(session?._id);
   const [chosenPreview, setChosenPreview] = useState<string | null>(null);
   const [present, setPresent] = useState(false);
+  const lines = store.useTranscriptLines(session?._id, token);
+  const sessionId = session?._id;
+
+  // Kept here, not in the panel, so transcribing continues in Present mode.
+  const transcription = useTranscription({
+    onFinal: (text) => {
+      if (sessionId && token) {
+        void store.addTranscriptLine({ sessionId, token, text });
+      }
+    },
+    onActiveChange: (on) => {
+      if (!sessionId || !token) return;
+      void store.setTranscribing({ sessionId, token, on });
+      // Pausing chunks whatever is left so it is searchable right away.
+      if (!on) void store.flushTranscript({ sessionId, token });
+    },
+  });
 
   // Escape leaves Present mode.
   useEffect(() => {
@@ -78,6 +97,9 @@ export default function Professor() {
           )}
         </div>
         <div className="counts">
+          {transcription.status === "listening" && (
+            <span className="live-dot on">Transcribing</span>
+          )}
           {!present && (
             <button
               className="secondary"
@@ -138,6 +160,23 @@ export default function Professor() {
                 </ul>
               </details>
             )}
+
+            <TranscriptPanel
+              status={transcription.status}
+              detail={transcription.detail}
+              interim={transcription.interim}
+              supported={transcription.supported}
+              lines={lines}
+              onStart={transcription.start}
+              onPause={transcription.stop}
+              onEdit={(lineId, text) =>
+                store.editTranscriptLine({ sessionId: session._id, token, lineId, text })
+              }
+              onDelete={(lineId) =>
+                store.deleteTranscriptLine({ sessionId: session._id, token, lineId })
+              }
+              onClear={() => store.clearTranscript({ sessionId: session._id, token })}
+            />
 
             <VisualPanel
               sessionId={session._id}
@@ -219,10 +258,11 @@ function AnswerLine({ question }: { question: Question }) {
     );
   }
   return (
-    <details>
+    <details open={question.answerConflict}>
       <summary className="muted">
-        {status === "fallback" ? "Closest passage shown" : "Answered from the lesson"}
+        {status === "fallback" ? "Closest passage shown" : "Answered from your material"}
       </summary>
+      {question.answerConflict && <p className="error">{question.answerNote}</p>}
       <p>{question.answerText}</p>
     </details>
   );

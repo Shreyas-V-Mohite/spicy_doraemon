@@ -8,7 +8,7 @@ The idea: an AI can help a professor teach in the moment, but it should never pu
 
 1. A professor creates a **course** and uploads its lessons (paste text or a `.md`/`.txt` file). Each lesson is split into passages and embedded for search.
 2. The professor starts a session and gets a join code and a QR code. Students join at `/s/<CODE>`.
-3. A student asks a question. The system finds the matching passages in the course's lessons and Claude writes a 2-3 sentence answer with quotes. The server checks that every quote appears word for word in the lesson. The student sees the answer and the quotes, labelled with where they came from.
+3. A student asks a question. The system finds the matching passages in the course's lessons and lecture transcripts (including the last two minutes of the live lecture), and Claude writes a 2-3 sentence answer with quotes. The server checks that every quote appears word for word in the lesson. The student sees the answer and the quotes, labelled with where they came from.
 4. If the lesson doesn't cover the question, the student is told so and the professor sees it flagged at the top of the queue.
 5. The professor page also shows confused/understood votes and lets the professor share a verified, highlighted 3D molecule with the class. "Present mode" hides the private panel so the page can be screen-shared.
 
@@ -19,6 +19,7 @@ The idea: an AI can help a professor teach in the moment, but it should never pu
 | Courses and sign-in | Passcode, per-course browser tokens, course list, past sessions |
 | Lessons | Upload or paste, passage preview, edit (unchanged passages keep their embeddings), delete; up to 50,000 words |
 | Automatic answers | Vector search plus Claude, quotes verified word for word, "not covered" flags, slow-Claude fallback, 20s cooldown and question caps |
+| Lecture transcription | Chrome's speech recognition on the professor page, kept as editable lines; embedded in chunks and searched with the lessons (this session and earlier ones); the last two minutes are always included; the lesson wins when the lecture contradicts it, and the professor is flagged; students are told when transcription is on |
 | Similar questions | Questions that mean the same thing are grouped into one card with a distinct-student count and a short label; a near-identical question reuses the verified answer; students see "N classmates asked something similar" |
 | Professor page | One page with a stage (join code, QR, shared molecule, votes) and a private queue of cards (not-covered first, then the most shared); Present mode |
 | Student page | Join by code, ask, vote, see answers with quotes |
@@ -27,7 +28,6 @@ The idea: an AI can help a professor teach in the moment, but it should never pu
 
 ## Not built yet
 
-- Live lecture transcription as a second answer source
 - Any molecule by name or SMILES, and about 20 auto-detected functional groups
 - Session memory for follow-up questions
 - Hand gestures and the camera stage (a teammate's viewer)

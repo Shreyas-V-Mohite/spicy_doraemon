@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalAction,
   internalMutation,
@@ -17,8 +17,50 @@ import {
 export const GROUP_THRESHOLD = 0.88;
 export const REUSE_THRESHOLD = 0.97;
 
+import { quoteAppears } from "./lib/verify";
+
 const LABEL_MODEL = "claude-sonnet-5-5";
 const LABEL_TIMEOUT_MS = 5000;
+
+// Can this answer be copied to a near-identical question? Only if it was a
+// clean answer (no lecture/lesson conflict) and every quote is still in the
+// lesson or transcript exactly as quoted. Edits and deletions since then
+// make an old answer stale.
+async function stillSupported(
+  ctx: QueryCtx,
+  answer: Doc<"answers">,
+  questionSessionId: Id<"sessions">,
+): Promise<boolean> {
+  if (answer.status !== "answered" || answer.conflict || !answer.quotes?.length) {
+    return false;
+  }
+  let lectureText: string | null = null;
+  for (const q of answer.quotes) {
+    if (q.chunkId) {
+      const lessonId = ctx.db.normalizeId("lessonChunks", q.chunkId);
+      const lectureId = ctx.db.normalizeId("transcriptChunks", q.chunkId);
+      const doc = lessonId
+        ? await ctx.db.get(lessonId)
+        : lectureId
+          ? await ctx.db.get(lectureId)
+          : null;
+      if (doc === null || !quoteAppears(q.text, doc.text)) return false;
+    } else if (q.source === "transcript") {
+      // Quoted from the live window: check this session's lines as they are now.
+      if (lectureText === null) {
+        const lines = await ctx.db
+          .query("transcriptLines")
+          .withIndex("by_session", (x) => x.eq("sessionId", questionSessionId))
+          .take(500);
+        lectureText = lines.map((l) => l.text).join("\n");
+      }
+      if (!quoteAppears(q.text, lectureText)) return false;
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
 
 // What the answer action needs to know about similar earlier questions.
 export const neighborInfo = internalQuery({
@@ -39,7 +81,7 @@ export const neighborInfo = internalQuery({
       out.push({
         vectorId,
         questionId: question._id,
-        answerStatus: answer?.status ?? null,
+        reusable: answer ? await stillSupported(ctx, answer, question.sessionId) : false,
         answerText: answer?.text ?? null,
         answerQuotes: answer?.quotes ?? null,
       });

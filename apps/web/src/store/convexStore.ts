@@ -18,6 +18,12 @@ export function useConvexStore(): SessionStore {
   const answer = useMutation(api.questions.markAnswered);
   const answerGroup = useMutation(api.questions.markGroupAnswered);
   const split = useMutation(api.questions.splitFromGroup);
+  const addLine = useMutation(api.transcript.addLine);
+  const editLine = useMutation(api.transcript.editLine);
+  const deleteLine = useMutation(api.transcript.deleteLine);
+  const setLive = useMutation(api.transcript.setTranscribing);
+  const flush = useAction(api.transcript.flushNow);
+  const clear = useAction(api.transcript.clear);
   const resetVotes = useMutation(api.feedback.reset);
   const build = useAction(api.visuals.buildPreview);
   const publishPreview = useMutation(api.visuals.publish);
@@ -72,6 +78,11 @@ export function useConvexStore(): SessionStore {
       useQuery(
         api.feedback.mine,
         sessionId ? { sessionId: sid(sessionId), studentId } : "skip",
+      ),
+    useTranscriptLines: (sessionId, token) =>
+      useQuery(
+        api.transcript.lines,
+        sessionId && token ? { sessionId: sid(sessionId), token } : "skip",
       ),
     useCurrentVisual: (sessionId) =>
       useQuery(
@@ -129,6 +140,33 @@ export function useConvexStore(): SessionStore {
     },
     resetFeedback: async ({ sessionId, token }) => {
       await resetVotes({ sessionId: sid(sessionId), token });
+    },
+    addTranscriptLine: async ({ sessionId, token, text }) => {
+      await addLine({ sessionId: sid(sessionId), token, text });
+    },
+    editTranscriptLine: async ({ sessionId, token, lineId, text }) => {
+      await editLine({
+        sessionId: sid(sessionId),
+        token,
+        lineId: lineId as Id<"transcriptLines">,
+        text,
+      });
+    },
+    deleteTranscriptLine: async ({ sessionId, token, lineId }) => {
+      await deleteLine({
+        sessionId: sid(sessionId),
+        token,
+        lineId: lineId as Id<"transcriptLines">,
+      });
+    },
+    setTranscribing: async ({ sessionId, token, on }) => {
+      await setLive({ sessionId: sid(sessionId), token, on });
+    },
+    flushTranscript: async ({ sessionId, token }) => {
+      await flush({ sessionId: sid(sessionId), token });
+    },
+    clearTranscript: async ({ sessionId, token }) => {
+      await clear({ sessionId: sid(sessionId), token });
     },
     markGroupAnswered: async ({ sessionId, token, groupId }) => {
       await answerGroup({

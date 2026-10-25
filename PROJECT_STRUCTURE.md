@@ -9,7 +9,8 @@ A live organic-chemistry classroom assistant. Students ask questions during a le
 | Hub | Convex holds all shared state and runs the AI actions |
 | Professor page | One page: a stage (join code, QR, shared molecule, vote counts) plus a private panel (question queue, molecule controls). "Present mode" hides the private panel so the page can be screen-shared. `/present/:code` redirects to it |
 | Professor identity | One passcode creates or reclaims **courses**; each browser keeps a per-course token (only its hash is stored). Sessions, lessons and transcripts belong to a course |
-| Answer source | The course's uploaded lessons (and, later, live lecture transcripts). Nothing else |
+| Answer source | The course's uploaded lessons and its lecture transcripts (this session's last two minutes, plus every earlier session in the course). Nothing else. If a lecture passage contradicts the lesson, the lesson is used, students see only lesson quotes, and the professor is flagged |
+| Transcription | Chrome's speech recognition (audio goes to Google), kept running by the professor page even in Present mode; text only is stored; the professor can edit or delete lines (answers can quote them); students see a notice while it is on |
 | Retrieval | Convex native vector index (`lessonChunks.by_embedding`, filtered by `courseId`). Embeddings: Voyage `voyage-4-lite`, 1024 dims. Keys made in MongoDB Atlas (`al-…`) use `ai.mongodb.com`; the client picks the endpoint from the key prefix |
 | Answer generation | Claude (`claude-sonnet-5-5`, structured output, thinking off, low effort, 10s timeout) writes 2-3 sentences plus quotes. The server checks every quote appears word for word in the passage it names. A failed check means "not covered", never an unverified answer |
 | Similar questions | Grouped per session by embedding similarity (>= 0.88, strict on purpose: a missed merge costs little, a false one hides a question); counted by distinct students; the professor can split a question out; a near-identical question (>= 0.97) reuses a verified answer. Thresholds come from a small sample and need tuning on real questions |
@@ -28,7 +29,8 @@ A live organic-chemistry classroom assistant. Students ask questions during a le
 │   ├── courses.ts           # create / list (passcode) / claim / get
 │   ├── sessions.ts          # create (course token), getByCode (public), listForCourse
 │   ├── lessons.ts           # upload, edit (reuses unchanged embeddings), delete, list
-│   ├── retrieval.ts         # vector search over a course's passages
+│   ├── retrieval.ts         # vector search over a course's lesson and lecture passages
+│   ├── transcript.ts        # live transcript lines, chunking, rebuild after edits, recent window
 │   ├── grouping.ts          # similar-question groups, thresholds, group labels
 │   ├── answers.ts           # the answer pipeline (internal action)
 │   ├── questions.ts         # submit (limits, schedules the answer), queues
@@ -40,11 +42,14 @@ A live organic-chemistry classroom assistant. Students ask questions during a le
 │       ├── chunk.ts         # lesson -> passages (shared with the upload preview)
 │       ├── embed.ts         # Voyage client
 │       ├── verify.ts        # word-for-word quote check
+│       ├── quotes.ts        # validator for a quote and where it came from
 │       ├── chem.ts          # chemistry service client
 │       └── visual.ts        # shared validator for visuals
 ├── apps/web/                # React + TypeScript (Vite); vercel.json for SPA routing
-│   └── src/views/           # Home, ProfessorStart, CoursePage, LessonForm,
-│                            # Professor, Stage, VisualPanel, Student
+│   └── src/
+│       ├── views/           # Home, ProfessorStart, CoursePage, LessonForm, Professor,
+│       │                    # Stage, TranscriptPanel, VisualPanel, Student
+│       └── transcribe/      # Transcriber interface, Web Speech implementation, hook
 ├── services/chem/           # FastAPI: /molecule, /highlight, /groups (RDKit SMARTS)
 └── samples/functional-groups.md   # sample lesson for trying the system
 ```
@@ -58,6 +63,7 @@ A live organic-chemistry classroom assistant. Students ask questions during a le
 | `sessions` | join code is public | code, topic, course |
 | `questions` | professor all; student own | text, status |
 | `answers` | student: status, text, quotes; professor: also reason and timings | one per question |
+| `transcriptLines`, `transcriptChunks` | professor only | what the professor said (editable lines); embedded chunks of about 60-120 words, searched per course |
 | `questionVectors`, `questionGroups` | professor/internal | question embeddings (vector index per session); groups of similar questions with a label |
 | `feedback` | counts public; student reads own vote | confused / understood; professor can reset |
 | `previews`, `published_visuals` | previews private; published public | molecule SDF plus RDKit-verified atom indices |
@@ -67,8 +73,9 @@ A live organic-chemistry classroom assistant. Students ask questions during a le
 ```
 Student submits -> question + pending answer saved, answer action scheduled
   1. embed the question once (Voyage, "query")
+  1a. (lecture) the last two minutes of this session's transcript are added as an always-on passage
   1b. search this session's earlier questions: >= 0.88 similar -> same group (label written by
-      Claude once two students share it); >= 0.97 and already answered -> copy that verified answer
+      Claude once two students share it); >= 0.97 and its answer is clean and every quote still exists in the lesson/transcript -> copy it
   2. vector search the course's passages; below score 0.25 -> not covered (no Claude call)
   3. Claude answers from the passages with exact quotes (retry once on a fast failure)
   4. verify every quote -> answered | not covered
@@ -78,13 +85,13 @@ Student sees the result live; professor sees flags first in the queue
 
 ## Status
 
-Built and tested: similar-question grouping (distinct-student counts, labels, split, group "mark answered", answer reuse, the students' classmates hint), courses and professor auth, lesson upload and editing with embeddings, retrieval, the answer pipeline with quote verification, limits, the merged professor page with Present mode and QR, student answers, the chemistry service, molecule preview and sharing, vote reset.
+Built and tested: live lecture transcription (editable lines, chunk search across sessions, recent window, lesson-wins conflict handling), similar-question grouping (distinct-student counts, labels, split, group "mark answered", answer reuse, the students' classmates hint), courses and professor auth, lesson upload and editing with embeddings, retrieval, the answer pipeline with quote verification, limits, the merged professor page with Present mode and QR, student answers, the chemistry service, molecule preview and sharing, vote reset.
 
-Planned next (in order): live lecture transcription feeding the same search (with the last two minutes of raw transcript in the prompt); the stage rework (any molecule by name or SMILES, about 20 auto-detected functional groups, separate "share molecule" and "share answer"); session memory in prompts; the teammate's gesture viewer; hosting.
+Planned next (in order): the stage rework (any molecule by name or SMILES, about 20 auto-detected functional groups, separate "share molecule" and "share answer"); session memory in prompts; the teammate's gesture viewer; hosting.
 
 Dropped: the private copilot, concept cards, the understanding check, voice commands, and the Droid observability agent (Factory's service was unavailable). Answer timings are stored on each answer instead.
 
-Known limits: quote checks prove the quoted text exists in the lesson, not that the summary reads it correctly; students are identified by a random browser id; no per-IP rate limit; sessions never end; the chemistry service needs a tunnel to a local machine until it is hosted.
+Known limits: deleting or editing a transcript line fixes future answers but does not retract answers students already saw; the "transcribing" notice can stay on if the professor's browser crashes; quote checks prove the quoted text exists in the lesson, not that the summary reads it correctly; students are identified by a random browser id; no per-IP rate limit; sessions never end; the chemistry service needs a tunnel to a local machine until it is hosted.
 
 ## Secrets
 

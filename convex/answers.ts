@@ -7,24 +7,33 @@ import { ANSWER_SCHEMA, ANSWER_SYSTEM } from "./ai/answerPrompt";
 import { quoteAppears } from "./lib/verify";
 import { GROUP_THRESHOLD, REUSE_THRESHOLD } from "./grouping";
 import { embedTexts } from "./lib/embed";
-import { searchLessons, type Passage } from "./retrieval";
+import { quoteValidator } from "./lib/quotes";
+import { searchCourse, type Passage } from "./retrieval";
 
 const MODEL = "claude-sonnet-5-5";
 const CLAUDE_TIMEOUT_MS = 10000;
 // Passages scoring below this never reach Claude. Tuned on a small sample
 // lesson (covered questions scored 0.41-0.65, unrelated ones under 0.1).
 const RETRIEVAL_FLOOR = 0.25;
-const PASSAGES_FOR_CLAUDE = 5;
+const PASSAGES_FOR_CLAUDE = 6;
+// The last stretch of the live lecture is always shown to Claude, even
+// before it has been embedded.
+const RECENT_WINDOW_MS = 120_000;
 const FALLBACK_WORDS = 120;
 
-type Quote = { chunkId: Id<"lessonChunks">; label: string; text: string };
+type Quote = {
+  source?: "lesson" | "transcript";
+  chunkId?: Id<"lessonChunks"> | Id<"transcriptChunks">;
+  label: string;
+  text: string;
+};
 
 type Outcome =
-  | { status: "answered"; text: string; quotes: Quote[] }
+  | { status: "answered"; text: string; quotes: Quote[]; conflict: boolean; note?: string }
   | { status: "not_covered"; note: string };
 
-const label = (p: Passage) =>
-  p.heading ? `${p.lessonTitle} › ${p.heading}` : p.lessonTitle;
+// A passage as Claude sees it, with the short id it must cite.
+type Item = { id: string; tag: string; passage: Pick<Passage, "source" | "chunkId" | "label" | "text"> };
 
 export const getJob = internalQuery({
   args: { answerId: v.id("answers") },
@@ -55,16 +64,9 @@ export const finish = internalMutation({
       v.literal("failed"),
     ),
     text: v.optional(v.string()),
-    quotes: v.optional(
-      v.array(
-        v.object({
-          chunkId: v.id("lessonChunks"),
-          label: v.string(),
-          text: v.string(),
-        }),
-      ),
-    ),
+    quotes: v.optional(v.array(quoteValidator)),
     note: v.optional(v.string()),
+    conflict: v.optional(v.boolean()),
     reusedFrom: v.optional(v.id("questions")),
     topScore: v.optional(v.number()),
     retrievalMs: v.optional(v.number()),
@@ -82,10 +84,10 @@ class VerificationFailed extends Error {}
 // One Claude call. Throws ClaudeTimeout on a slow call, VerificationFailed if
 // a quote can't be found in the passage it names; returns not_covered when
 // Claude says the passages don't answer the question.
-async function askClaude(question: string, passages: Passage[]): Promise<Outcome> {
-  const byId = new Map(passages.map((p, i) => [`P${i + 1}`, p]));
-  const context = passages
-    .map((p, i) => `[P${i + 1}] ${p.text}`)
+async function askClaude(question: string, items: Item[]): Promise<Outcome> {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const context = items
+    .map((i) => `[${i.id}] (${i.tag}) ${i.passage.text}`)
     .join("\n\n");
 
   const client = new Anthropic({ maxRetries: 0, timeout: CLAUDE_TIMEOUT_MS });
@@ -93,7 +95,7 @@ async function askClaude(question: string, passages: Passage[]): Promise<Outcome
   try {
     response = await client.messages.create({
       model: MODEL,
-      max_tokens: 600,
+      max_tokens: 700,
       system: ANSWER_SYSTEM,
       // Thinking off and low effort keep this inside the time budget.
       thinking: { type: "between_tools" },
@@ -120,6 +122,8 @@ async function askClaude(question: string, passages: Passage[]): Promise<Outcome
   const out = JSON.parse(block.text) as {
     covered: boolean;
     answer: string;
+    conflict: boolean;
+    conflict_note: string;
     quotes: { passage_id: string; quote: string }[];
   };
 
@@ -131,13 +135,32 @@ async function askClaude(question: string, passages: Passage[]): Promise<Outcome
   }
   const quotes: Quote[] = [];
   for (const q of out.quotes) {
-    const passage = byId.get(q.passage_id);
-    if (!passage || !quoteAppears(q.quote, passage.text)) {
+    const item = byId.get(q.passage_id);
+    if (!item || !quoteAppears(q.quote, item.passage.text)) {
       throw new VerificationFailed(`Quote not found in ${q.passage_id}`);
     }
-    quotes.push({ chunkId: passage.chunkId, label: label(passage), text: q.quote.trim() });
+    quotes.push({
+      source: item.passage.source,
+      chunkId: item.passage.chunkId ?? undefined,
+      label: item.passage.label,
+      text: q.quote.trim(),
+    });
   }
-  return { status: "answered", text: out.answer.trim(), quotes };
+  // When the lecture and lesson disagree, the lesson must be what is quoted.
+  if (out.conflict && !quotes.some((q) => q.source === "lesson")) {
+    throw new VerificationFailed("Conflict reported but the lesson was not quoted");
+  }
+  return {
+    status: "answered",
+    text: out.answer.trim(),
+    // The student sees only the lesson's side of a disagreement; the
+    // professor sees the note explaining it.
+    quotes: out.conflict ? quotes.filter((q) => q.source === "lesson") : quotes,
+    conflict: out.conflict,
+    note: out.conflict
+      ? `Lecture and lesson disagree: ${out.conflict_note.slice(0, 200)}`
+      : undefined,
+  };
 }
 
 // Generates and verifies the answer to one question, then stores it.
@@ -150,6 +173,7 @@ export const generate = internalAction({
       text?: string;
       quotes?: Quote[];
       note?: string;
+      conflict?: boolean;
       reusedFrom?: Id<"questions">;
       topScore?: number;
       retrievalMs?: number;
@@ -192,7 +216,7 @@ export const generate = internalAction({
       const reuseFrom = scored.find(
         (n) =>
           n.score >= REUSE_THRESHOLD &&
-          n.answerStatus === "answered" &&
+          n.reusable &&
           n.answerText !== null &&
           n.answerQuotes !== null,
       );
@@ -221,19 +245,61 @@ export const generate = internalAction({
       }
 
       let passages: Passage[];
+      let recent: { text: string; topic: string };
       try {
-        passages = await searchLessons(ctx, job.courseId, vector, PASSAGES_FOR_CLAUDE);
+        passages = await searchCourse(ctx, job.courseId, vector);
+        recent = await ctx.runQuery(internal.transcript.recent, {
+          sessionId: job.sessionId,
+          sinceMs: Date.now() - RECENT_WINDOW_MS,
+        });
       } catch (err) {
         await done({ status: "failed", note: `Search failed: ${String(err).slice(0, 150)}` });
         return;
       }
       const retrievalMs = Date.now() - started;
       const topScore = passages[0]?.score;
-      const relevant = passages.filter((p) => p.score >= RETRIEVAL_FLOOR);
-      if (relevant.length === 0) {
+
+      // This session's last two minutes arrive as their own passage, so drop
+      // embedded chunks that overlap it.
+      const windowStart = Date.now() - RECENT_WINDOW_MS;
+      const relevant = passages
+        .filter((p) => p.score >= RETRIEVAL_FLOOR)
+        .filter(
+          (p) =>
+            !(
+              p.source === "transcript" &&
+              p.sessionId === job.sessionId &&
+              (p.endedAt ?? 0) >= windowStart
+            ),
+        )
+        .slice(0, PASSAGES_FOR_CLAUDE);
+
+      const items: Item[] = [];
+      let l = 0;
+      let t = 0;
+      for (const p of relevant) {
+        items.push(
+          p.source === "lesson"
+            ? { id: `L${++l}`, tag: "lesson", passage: p }
+            : { id: `T${++t}`, tag: "lecture", passage: p },
+        );
+      }
+      if (recent.text.trim() !== "") {
+        items.push({
+          id: "R1",
+          tag: "just now",
+          passage: {
+            source: "transcript",
+            chunkId: null,
+            label: `Lecture "${recent.topic}", just now`,
+            text: recent.text,
+          },
+        });
+      }
+      if (items.length === 0) {
         await done({
           status: "not_covered",
-          note: "No lesson passage is similar enough to the question",
+          note: "No lesson or lecture passage is similar enough to the question",
           topScore,
           retrievalMs,
         });
@@ -245,7 +311,7 @@ export const generate = internalAction({
       const claudeStart = Date.now();
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const outcome = await askClaude(job.question, relevant);
+          const outcome = await askClaude(job.question, items);
           await done({
             ...outcome,
             topScore,
@@ -278,14 +344,21 @@ export const generate = internalAction({
       }
 
       // Claude is slow or down: show the closest passage verbatim.
-      const best = relevant[0];
+      const best = items[0].passage;
       const words = best.text.split(/\s+/);
       const excerpt =
         words.length > FALLBACK_WORDS ? words.slice(0, FALLBACK_WORDS).join(" ") : best.text;
       await done({
         status: "fallback",
-        text: "The assistant is slow right now. This is the closest passage from your lesson:",
-        quotes: [{ chunkId: best.chunkId, label: label(best), text: excerpt }],
+        text: "The assistant is slow right now. This is the closest passage I found:",
+        quotes: [
+          {
+            source: best.source,
+            chunkId: best.chunkId ?? undefined,
+            label: best.label,
+            text: excerpt,
+          },
+        ],
         note: claudeNote,
         topScore,
         retrievalMs,

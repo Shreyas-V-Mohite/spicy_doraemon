@@ -98,3 +98,12 @@ select { font: inherit; padding: 10px; border-radius: 8px; border: 1px solid var
 .present-mode .counts .pill { font-size: 1.2rem; padding: 8px 18px; }
 .present-grid { display: grid; grid-template-columns: 1fr; }
 .list li.flagged { border-color: var(--confused); }
+.live-dot { font-size: 0.85rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.live-dot::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.live-dot.on { color: var(--confused); }
+.live-dot.on::before { background: var(--confused); animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.3; } }
+.notice { margin: 8px 0; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 0.85rem; }
+.transcript li { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+.line-actions { flex-shrink: 0; gap: 4px; }
+.line-actions button { padding: 2px 8px; font-size: 0.75rem; }

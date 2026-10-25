@@ -72,6 +72,7 @@ export const getByCode = query({
       code: session.code,
       topic: session.topic,
       courseId: session.courseId,
+      transcribing: session.transcribing ?? false,
     };
   },
 });

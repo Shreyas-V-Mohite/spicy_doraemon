@@ -3,6 +3,7 @@ export interface PublicSession {
   code: string;
   topic: string;
   courseId?: string;
+  transcribing?: boolean;
 }
 
 export type AnswerStatus =
@@ -21,6 +22,7 @@ export interface Question {
   answerStatus: AnswerStatus | null;
   answerNote: string | null;
   answerText: string | null;
+  answerConflict: boolean;
 }
 
 // One card in the professor's queue: a single question, or several students'
@@ -88,4 +90,10 @@ export interface CourseSession {
   code: string;
   topic: string;
   _creationTime: number;
+}
+
+export interface TranscriptLine {
+  _id: string;
+  text: string;
+  startedAt: number;
 }
