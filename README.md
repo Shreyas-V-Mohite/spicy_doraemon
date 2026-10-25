@@ -6,34 +6,34 @@ The idea: an AI can help a professor teach in the moment, but it should never pu
 
 ## How it works
 
-1. The professor starts a session and gets a 5-character join code.
-2. Students join at `/s/<CODE>`, send questions, and vote confused or understood. The professor sees a live question queue and vote counts.
-3. The professor clicks "Ask copilot" on a question. Claude answers from a fixed set of approved lesson excerpts and names a molecule and a functional group to show. The answer is private to the professor.
-4. The chemistry service looks the molecule up on PubChem and uses RDKit to find the exact atoms of that functional group. If the group isn't in the molecule, no highlight is offered.
-5. The professor previews the 3D molecule with the highlighted atoms, then clicks Publish. Students and the presentation view (`/present/<CODE>`) update live.
+1. A professor creates a **course** and uploads its lessons (paste text or a `.md`/`.txt` file). Each lesson is split into passages and embedded for search.
+2. The professor starts a session and gets a join code and a QR code. Students join at `/s/<CODE>`.
+3. A student asks a question. The system finds the matching passages in the course's lessons and Claude writes a 2-3 sentence answer with quotes. The server checks that every quote appears word for word in the lesson. The student sees the answer and the quotes, labelled with where they came from.
+4. If the lesson doesn't cover the question, the student is told so and the professor sees it flagged at the top of the queue.
+5. The professor page also shows confused/understood votes and lets the professor share a verified, highlighted 3D molecule with the class. "Present mode" hides the private panel so the page can be screen-shared.
 
 ## What is available today
 
 | Area | Status |
 |---|---|
-| Sessions | Professor passcode login, join codes, professor and student pages, presentation view |
-| Student questions | Submit (up to 20 per student), live professor queue, mark answered |
-| Understanding feedback | Confused / Understood votes, live counts, professor reset |
-| Claude copilot | Private explanation, cited source excerpts and a teaching action; validated against the lesson; falls back to a labelled "cached" answer if Claude is slow or down |
-| Chemistry service | PubChem lookup (demo molecules cached offline), RDKit functional-group matching for hydroxyl, carboxylic acid and ester |
-| Molecule viewer | 3D view (rotate, zoom, reset) with highlighted atoms, driven only by the verified payload |
-| Professor-controlled sharing | Private preview, explicit publish and unpublish; students never see previews or suggestions |
-| Demo lesson | Ethanol, acetic acid and aspirin with five approved excerpts |
+| Courses and sign-in | Passcode, per-course browser tokens, course list, past sessions |
+| Lessons | Upload or paste, passage preview, edit (unchanged passages keep their embeddings), delete; up to 50,000 words |
+| Automatic answers | Vector search plus Claude, quotes verified word for word, "not covered" flags, slow-Claude fallback, 20s cooldown and question caps |
+| Professor page | One page with a stage (join code, QR, shared molecule, votes) and a private queue; Present mode |
+| Student page | Join by code, ask, vote, see answers with quotes |
+| Chemistry service | PubChem lookup, RDKit functional-group matching for hydroxyl, carboxylic acid and ester |
+| Molecule sharing | 3D view with highlighted atoms; preview, then publish to students |
 
 ## Not built yet
 
-- Concept cards from lecture transcript text, session memory (current molecule), and the understanding check
-- QR code on the presentation view, voice input, and hand gestures
-- Droid observability agent
-- Stable hosting: the chemistry service currently needs a tunnel to your machine, and the frontend is not deployed
-- Integration with the teammate's viewer and SpacetimeDB (waiting on their context)
+- Grouping similar questions, and the "classmates asked something similar" hint
+- Live lecture transcription as a second answer source
+- Any molecule by name or SMILES, and about 20 auto-detected functional groups
+- Session memory for follow-up questions
+- Hand gestures and the camera stage (a teammate's viewer)
+- Stable hosting: the chemistry service needs a tunnel to your machine, and the frontend is not deployed
 
-Design decisions and the Convex tables are in `PROJECT_STRUCTURE.md`.
+Design decisions and the data model are in `PROJECT_STRUCTURE.md`.
 
 ## Run it locally
 
@@ -48,6 +48,7 @@ You need Node 20+, `uv`, and `cloudflared` (or another tunnel).
    ```
    npx convex env set PROFESSOR_PASSCODE <passcode>
    npx convex env set ANTHROPIC_API_KEY <key>
+   npx convex env set VOYAGE_API_KEY <key>   # embeddings; Atlas-issued (al-) keys work too
    npx convex env set CHEM_SERVICE_URL <public url of the chemistry service>
    ```
 3. Start the chemistry service and a tunnel so Convex (in the cloud) can reach it:
@@ -60,14 +61,14 @@ You need Node 20+, `uv`, and `cloudflared` (or another tunnel).
    ```
    npm run dev -w web
    ```
-5. Open `/professor`, start a session, then join from another window at `/s/<CODE>`. The presentation view is `/present/<CODE>`.
+5. Open `/professor`, enter the passcode, create a course, add the sample lesson from `samples/functional-groups.md`, and start a session. Join from another window at `/s/<CODE>` and ask "Why is acetic acid acidic?".
 
 Tests: `cd services/chem && uv run pytest`, and `npm run typecheck`.
 
 ## Safety model
 
-Claude only proposes `{molecule, functional group, cited excerpt ids}` from a fixed lesson. The chemistry service (PubChem + RDKit SMARTS) is the only source of atom indices. If it cannot verify a highlight, nothing can be published. Private suggestions and previews live in tables only the professor token can read.
+Answers come only from the professor's lessons, and every quote is checked word for word before a student sees it. If the check fails or the lesson doesn't cover the question, the student is told so instead of being shown an unverified answer. The chemistry service (PubChem + RDKit SMARTS) is the only source of atom indices, and nothing unverified can be published. Professor-only data lives behind the course token.
 
 ## Third-party code
 
-3Dmol.js, RDKit, PubChemPy, Convex, React, FastAPI. No other code is reused.
+3Dmol.js, RDKit, PubChemPy, Voyage AI embeddings, Convex, React, FastAPI, qrcode.react. No other code is reused.
