@@ -1,0 +1,59 @@
+%% MolViz system architecture. Render to docs/Architecture.png (see the note in the README).
+%% Three columns: Browser -> Convex -> External services. Few edges on purpose, so
+%% the arrows stay readable; the per-question steps are in docs/answer_flow.png.
+flowchart LR
+  subgraph Browser["Browser (React 19 + Vite)"]
+    direction TB
+    PROF["Professor page<br/>queue, stage, Present mode<br/>slides (pdf.js), camera and mic"]
+    STU["Student page<br/>follow slides, ask (typed or voice),<br/>vote, escalate, watch camera"]
+    VIEW["3Dmol.js viewer<br/>+ hand gestures (MediaPipe)"]
+    SPEECH["Chrome Web Speech<br/>lecture transcription, dictation"]
+    SPEECH --> PROF
+    PROF --- VIEW
+  end
+
+  subgraph Convex["Convex (database, realtime, scheduler, vector index)"]
+    direction TB
+    subgraph QA["Questions and answers"]
+      direction TB
+      QS["questions.ts<br/>limits, escalate, reply"]
+      ANS["answers.ts<br/>answer pipeline"]
+      RET["retrieval.ts + memory.ts<br/>vector search, follow-up context"]
+      GRP["grouping.ts<br/>similar questions"]
+      VER["lib/verify.ts<br/>word-for-word quote check"]
+      QS --> ANS --> RET
+      ANS --> GRP
+      ANS --> VER
+    end
+    subgraph LIVE["Live room"]
+      direction TB
+      LV["live.ts<br/>slides, stage mode, camera on air,<br/>WebRTC signalling, relay"]
+      SAI["slideAi.ts<br/>read each slide for compounds"]
+      VIS["visuals.ts + sharing.ts<br/>share molecule or answer"]
+    end
+    DB[("Tables<br/>courses, lessons, lessonChunks, transcript*,<br/>questions, answers, feedback (per slide),<br/>sessions, slideMolecules, rtcSignals,<br/>relay, stageViews, published_visuals")]
+    QA --- DB
+    LIVE --- DB
+  end
+
+  subgraph External["External services"]
+    direction TB
+    CLAUDE["Anthropic Claude<br/>sonnet-5-5: answers, group labels<br/>opus-5-5: reads slides"]
+    VOYAGE["Voyage AI embeddings<br/>voyage-4-lite, 1024 dims<br/>(MongoDB Atlas keys supported)"]
+    CHEM["Chemistry service<br/>FastAPI, RDKit + PubChem<br/>only source of atom indices"]
+    TURN["STUN / optional TURN<br/>for the camera"]
+  end
+
+  STU -->|"ask, vote, escalate"| QS
+  PROF -->|"lessons, transcript, slide, share"| LV
+  Convex -.->|"live subscriptions"| Browser
+  PROF <-->|"WebRTC video and audio"| STU
+  PROF -.->|"fallback: JPEG + audio via relay"| LV
+
+  ANS --> CLAUDE
+  GRP --> CLAUDE
+  RET --> VOYAGE
+  SAI --> CLAUDE
+  VIS --> CHEM
+  SAI --> CHEM
+  LV -.-> TURN

@@ -1,96 +1,53 @@
 # MolViz
 
-A live organic-chemistry classroom, run inside the web app instead of over Zoom: the professor teaches with slides, camera, questions and 3D molecules in one place. Students follow the slides, ask questions and vote "confused" or "understood" while the professor lectures. Each student gets an answer automatically, taken only from the professor's own lessons and lecture transcript, with quotes that the server has checked word for word. The AI handles what the lessons cover, so only unanswered or escalated questions reach the professor. Claude reads each slide for the compounds on it, and the professor can put a verified, highlighted 3D molecule or a good answer on every student's screen.
+A live organic-chemistry classroom that runs in the browser. The professor teaches with slides, camera, questions and 3D molecules in one place. Students follow along, ask questions, and get answers taken only from the professor's own material, with every quote checked word for word.
 
-The idea: an AI can help a professor teach in the moment, but it should never put an unchecked claim in front of students. Claude proposes, code verifies, and the professor decides what the whole class sees.
+An AI can help a professor teach in the moment, but it should never put an unchecked claim in front of students. **Claude proposes, code verifies, and the professor decides what the whole class sees.**
 
-## How it works
+## The idea: one workflow, two rooms
 
-1. A professor creates a **course** and uploads its lessons (paste text or a `.md`/`.txt` file). Each lesson is split into passages and embedded for search.
-2. The professor starts a session and gets a join code and a QR code. Students join at `/s/<CODE>`. The professor can upload a PDF of slides, and every student follows it page by page. The professor's camera and microphone go live to the class.
-3. A student asks a question. The system finds the matching passages in the course's lessons and lecture transcripts (including the last two minutes of the live lecture), and Claude writes a 2-3 sentence answer with quotes. The server checks that every quote appears word for word in the lesson. The student sees the answer and the quotes, labelled with where they came from.
-4. If the lesson doesn't cover the question, the student is told so and the professor sees it flagged at the top of the queue. A student who read the AI's answer and still wants the professor can send it on ("escalate"), and the professor can reply to that student directly.
-5. Votes are counted per slide, so the professor can see where the class got lost. The professor can load any molecule by name or SMILES, or use the one Claude found on the current slide. The professor can load any molecule by name or SMILES, highlight one of the functional groups RDKit finds in it, and share it, or share a good answer, with the whole class. "Present mode" hides the private panel so the page can be screen-shared.
+The goal is the same on both sides of the room: the person explaining and the people listening end up with the same understanding. The classroom is the proof case. Swap the lessons for a product doc set and the student for a client, and the same workflow is a sales call where the client's doubts are cleared and they can decide, yes or no, with a clear picture of what the product does.
 
-## One workflow, two rooms
-
-The goal is the same on both sides of the room: the person explaining and the people listening end up with the same understanding. Claude proposes, code verifies, and the explainer decides what everyone sees. The classroom is the proof case. Swap the lessons for a product doc set and the student for a client, and the same workflow is a sales call where the client's doubts are cleared and they can decide, yes or no, with a clear picture of what the product does.
-
-| Feature | Classroom | Sales call |
+| In the product | Classroom | Sales call |
 |---|---|---|
-| Lessons and lecture transcript | The only source of answers | Product docs, pricing and security material |
-| Slides, followed page by page | Lecture slides | The deck or demo |
-| Professor camera and mic | The lecture | The rep on the call |
-| Verified answers with quotes | Every quote is checked word for word | The client is never told something the company didn't say |
-| "Not covered" flag | A gap in the lesson | A gap in the collateral, so the rep answers honestly instead of guessing |
-| Similar questions grouped | "7 students asked about acidity" | "Three people on the buying committee asked about security" |
+| Lessons and transcript | The only source of answers | Product docs, pricing, security material |
+| Verified answers with quotes | Every quote checked word for word | The client is never told something the company didn't say |
+| "Not covered" flag | A gap in the lesson | A gap in the collateral, so the rep answers honestly |
+| Similar questions grouped | "7 students asked about acidity" | "Three buyers asked about security" |
 | Per-slide votes | Where the class got lost | Where the client got lost |
-| Escalate to the professor, direct reply | A student who still wants a person | A client who wants the rep, answered privately |
-| AI-read slides, shared molecule | The compound being taught, in 3D | The product visual being discussed |
+| Escalate to the professor | A student who still wants a person | A client who wants the rep |
 
-Only the classroom version is built. There is no CRM, SSO or compliance work behind the sales column. See `docs/pitch.md` for the pitch and the claims to avoid.
+Only the classroom version is built. See `docs/pitch.md` for the pitch and the claims to avoid.
+
+## What it does now
+
+- **Courses and lessons.** A professor signs in with a passcode, creates a course and uploads lessons. Each is split into passages and embedded for search.
+- **Live room.** A session has a join code and QR code (`/s/<CODE>`). The professor shares a PDF of slides that every student follows, and goes live with camera and mic.
+- **Automatic answers.** A student's question is searched against the lessons and lecture transcript, Claude writes 2-3 sentences with quotes, and the server checks every quote. If the lesson doesn't cover it, the student is told and the professor sees it flagged first.
+- **Follow-ups and similar questions.** Answers use the student's own earlier questions. Similar questions are grouped into one card with a student count.
+- **Escalation.** A student can send an AI answer on to the professor, who can reply to that student directly.
+- **Votes per slide.** Confused or understood, so the professor sees where the class got lost.
+- **Molecules.** Claude reads each slide for the compounds on it. The professor loads any molecule by name or SMILES, highlights a functional group (RDKit finds 20 kinds) and shares it. The server re-verifies every highlight.
+- **Hand gestures.** The professor can resize, rotate and move the molecule by hand (MediaPipe). Mouse and touch still work.
+- **Live transcription and voice.** Chrome's speech recognition transcribes the lecture, and students can dictate questions.
+
+The full list is in `docs/features.md`.
 
 ## Architecture
 
 ![System architecture](docs/Architecture.png)
 
-### Answer flow
+The diagram source is `docs/architecture.mmd`. Convex holds all shared state and runs every AI action. Video goes browser to browser over WebRTC, with a low-rate relay through Convex for networks that block it. The chemistry service (FastAPI, RDKit, PubChem) is the only source of atom indices, so Claude never produces a highlight.
 
-![Answer flow](docs/answer_flow.png)
-
-### Live room
-
-The live room was added after the diagrams above were drawn, so it is not in them. It runs through Convex too.
-
-```mermaid
-flowchart LR
-  P["Professor browser<br/>slides (pdf.js), camera, mic"]
-  C[("Convex<br/>sessions, rtcSignals,<br/>relay, stageViews,<br/>slideMolecules")]
-  S["Student browsers"]
-  AI["Claude (claude-opus-5-5)<br/>reads each slide:<br/>image + text"]
-  CH["Chemistry service<br/>structure + highlights"]
-
-  P -->|current slide, stage mode| C
-  C -->|live subscriptions| S
-  P <-->|"WebRTC video/audio<br/>(Convex carries the signalling)"| S
-  P -.->|"fallback: low-rate JPEG +<br/>16 kHz audio via Convex"| C
-  C -.-> S
-  C --> AI
-  AI -->|compound names| CH
-  CH -->|verified molecule| C
-  P -->|"3D view (mouse or hands)"| C
-```
-
-Video goes browser to browser over WebRTC (STUN by default, optional TURN). A student whose network blocks that gets a low-rate relay through Convex instead. Claude only names the compounds on a slide; the structure still comes from the chemistry service.
-
-Claude proposes, code verifies, the professor decides what the class sees. The chemistry service is the only source of atom indices, so Claude never produces a highlight. The pitch and framing are in `docs/pitch.md`.
-
-## What is available today
-
-| Area | Status |
+| Layer | Technology |
 |---|---|
-| Courses and sign-in | Passcode, per-course browser tokens, course list, past sessions |
-| Lessons | Upload or paste, passage preview, edit (unchanged passages keep their embeddings), delete; up to 50,000 words |
-| Automatic answers | Vector search plus Claude, quotes verified word for word, "not covered" flags, slow-Claude fallback, 20s cooldown and question caps |
-| Lecture transcription | Chrome's speech recognition on the professor page, kept as editable lines; embedded in chunks and searched with the lessons (this session and earlier ones); the last two minutes are always included; the lesson wins when the lecture contradicts it, and the professor is flagged; students are told when transcription is on |
-| Follow-up questions | Each answer is given the asking student's own earlier questions and answers in the session, plus the lecture topic and what is on the class screen, so "explain that again" and "why is this group acidic?" work. Follow-ups are also searched with their context, and are never grouped with other students' questions or answered from them |
-| Similar questions | Questions that mean the same thing are grouped into one card with a distinct-student count and a short label; a near-identical question reuses the verified answer; students see "N classmates asked something similar" |
-| Professor page | One page with a stage (join code, QR, shared molecule, votes) and a private queue of cards (escalated and not-covered first, then the most shared); Present mode |
-| Student page | Join by code, follow the slides, watch the professor's camera, ask (typed or dictated by voice), vote, see answers with quotes, send an answer on to the professor |
-| Slides | The professor uploads a PDF (pdf.js); everyone sees the same page, and the stage switches between slides and the 3D molecule |
-| Live camera | The professor's camera and mic over WebRTC with Convex signalling; a low-rate relay through Convex for networks that block it; optional TURN |
-| AI-read slides | Claude reads each slide (picture and text) and lists its compounds; the main one is shared automatically and shown in 3D, with the structure from the chemistry service |
-| Per-slide votes | Confused/understood votes belong to the slide on screen, with a "where the class got lost" view for the professor |
-| Escalation and replies | A student can send an AI-answered question on to the professor, who can reply to that student only |
-| Chemistry service | PubChem lookup by name, or a 3D structure built from SMILES; RDKit detects 20 functional groups (alcohol, phenol, ether, aldehyde, ketone, acid, ester, anhydride, acyl halide, amide, three kinds of amine, nitrile, nitro, thiol, alkyl halide, alkene, alkyne, aromatic ring) |
-| Hand gestures | A "Use hand gestures" toggle puts the professor's camera behind the molecule and lets the professor resize, rotate and move it by hand (open and close your hand, hold still and turn it, point). The professor's view is synced to students in real time, and students can turn their own copy with their hands. Mouse and touch still work, and the camera is optional. Lives in `packages/hand-gesture` (teammate's gesture lab: MediaPipe tracking, gesture recognition). The tests cover the logic, not real hands |
-| Molecule stage | The professor loads any molecule, sees the groups found in it as chips, picks one to highlight and a display style, and shares it; the server re-verifies the highlight before students see it |
-| Shared answers | The professor can put one student's question and the answer they were shown (anonymous) on every screen |
-
-## Not built yet
-
-- Stable hosting: the chemistry service needs a tunnel to your machine unless it is deployed (Render or Vercel, see `docs/deploy.md`), and the frontend is not deployed
-- The live room (camera, relay, slide reading) has not been tried with a real class or on strict networks
+| Backend, realtime, vector search | Convex |
+| LLM | Anthropic Claude (`claude-sonnet-5-5` for answers, `claude-opus-5-5` to read slides) |
+| Embeddings | Voyage AI `voyage-4-lite` (MongoDB Atlas keys supported) |
+| Chemistry | FastAPI, RDKit, PubChem |
+| Web app | React 19, Vite, 3Dmol.js, pdf.js |
+| Gestures, speech | MediaPipe Hand Landmarker, Chrome Web Speech |
+| Hosting | Vercel (web app), Render or Vercel (chemistry service) |
 
 Design decisions and the data model are in `PROJECT_STRUCTURE.md`.
 
@@ -107,34 +64,41 @@ You need Node 20+, `uv`, and `cloudflared` (for a local tunnel).
    ```
    npx convex env set PROFESSOR_PASSCODE <passcode>
    npx convex env set ANTHROPIC_API_KEY <key>
-   npx convex env set VOYAGE_API_KEY <key>   # embeddings; Atlas-issued (al-) keys work too
+   npx convex env set VOYAGE_API_KEY <key>
    ```
-   Optional, so the professor's camera reaches students behind strict firewalls: `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL`, or `METERED_DOMAIN` and `METERED_API_KEY`.
-3. Start the chemistry service, then publish it so Convex (in the cloud) can reach it. `npm run tunnel` starts a free Cloudflare tunnel and sets `CHEM_SERVICE_URL` for you:
+   Optional, so the camera reaches students behind strict firewalls: `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL`, or `METERED_DOMAIN` and `METERED_API_KEY`.
+3. Start the chemistry service and publish it so Convex can reach it. `npm run tunnel` sets `CHEM_SERVICE_URL` for you:
    ```
    cd services/chem && uv sync && uv run uvicorn app.main:app --port 8000   # one terminal
    npm run tunnel                                                          # another
    ```
-4. Fetch MediaPipe's hand model once (about 8 MB, for hand gestures), create `apps/web/.env.local` with `VITE_CONVEX_URL=<your Convex deployment URL>`, and start the web app:
+4. Fetch the hand model once (about 8 MB), create `apps/web/.env.local` with `VITE_CONVEX_URL=<your Convex URL>`, and start the web app:
    ```
    npm run models -w @spicy/hand-gesture
    npm run dev -w web
    ```
-5. Check everything, and create the demo course and lesson:
+5. Check everything and create the demo course:
    ```
-   npm run preflight     # says what is missing and how to fix it
+   npm run preflight
    npm run demo:seed
    ```
-6. Open `/professor`, enter the passcode and open the course. The demo slides and notes are in `samples/demo`. Join from another window at `/s/<CODE>` and ask "Why is acetic acid acidic?".
+6. Open `/professor`, enter the passcode and open the course. Join from another window at `/s/<CODE>` and ask "Why is acetic acid acidic?". Demo slides and notes are in `samples/demo`.
 
-Tests: `cd services/chem && uv run pytest`, `npm test -w @spicy/hand-gesture`, `npm run typecheck`. To measure the answer thresholds on a lesson, run `node scripts/eval.mjs` (it calls real services, so it costs a little).
+Tests: `cd services/chem && uv run pytest`, `npm test -w @spicy/hand-gesture`, `npm run typecheck`. To put it online, see `docs/deploy.md`. For the demo, see `docs/demo-script.md`.
 
-To put it online (chemistry service on Render, web app on Vercel), see `docs/deploy.md`. For the demo, see `docs/demo-script.md`.
+## Future work
+
+- **Deploy for real.** Host the chemistry service and web app permanently, and try the live room (camera, relay, slide reading) on real classroom networks.
+- **Measure on real data.** Re-run `scripts/eval.mjs` on a real lesson and real questions, since the answer thresholds were tuned on a synthetic one.
+- **Real-world gesture testing.** The gesture logic is tested, but not yet with real hands and lighting.
+- **Smarter agents.** Ideas we have discussed, not built: a router that classifies each question (new, follow-up, logistics, off-topic), a critic that checks an answer is really supported by its quotes, a professor-side suggestion agent, and a gap agent that drafts new lesson passages from uncovered questions.
+- **Sales-call version.** CRM and call-platform integration, SSO, approved-content governance, audit logs and consent.
+- **Known limits.** The follow-up detector is a small rule. Editing a transcript line doesn't retract answers already shown. Students are identified by a random browser id. There is no per-IP rate limit, and sessions never end.
 
 ## Safety model
 
-Answers come only from the professor's lessons, and every quote is checked word for word before a student sees it. If the check fails or the lesson doesn't cover the question, the student is told so instead of being shown an unverified answer. The chemistry service (PubChem + RDKit SMARTS) is the only source of atom indices, and nothing unverified can be published. Claude names the compounds on a slide, but never produces a structure. Professor-only data lives behind the course token.
+Answers come only from the professor's lessons, and every quote is checked word for word before a student sees it. If the check fails or the lesson doesn't cover the question, the student is told so. Claude names the compounds on a slide but never produces a structure, and nothing unverified can be published. Professor-only data lives behind the course token.
 
 ## Third-party code
 
-pdf.js, 3Dmol.js, RDKit, PubChemPy, Voyage AI embeddings, Convex, React, FastAPI, qrcode.react, MediaPipe Hand Landmarker. The hand-tracking and gesture code in `packages/hand-gesture` is from the team's Molecule Gesture Lab. No other code is reused.
+pdf.js, 3Dmol.js, RDKit, PubChemPy, Voyage AI embeddings, Convex, React, FastAPI, qrcode.react, MediaPipe Hand Landmarker. The gesture code in `packages/hand-gesture` is from the team's Molecule Gesture Lab.
