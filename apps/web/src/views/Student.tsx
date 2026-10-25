@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useStore } from "../store/sessionStore";
 import { errorMessage, getStudentId } from "../lib/identity";
-import type { FeedbackValue } from "../types";
+import type { FeedbackValue, MyQuestion } from "../types";
 import MoleculeView from "../viewer/MoleculeView";
 
 export default function Student() {
@@ -98,15 +98,46 @@ export default function Student() {
           <ul className="list">
             {mine.map((q) => (
               <li key={q._id}>
-                {q.text}{" "}
-                {q.status === "answered" && (
-                  <span className="pill understood">answered</span>
-                )}
+                <p>
+                  <strong>{q.text}</strong>
+                </p>
+                <AnswerCard answer={q.answer} />
               </li>
             ))}
           </ul>
         </>
       )}
     </main>
+  );
+}
+
+function AnswerCard({ answer }: { answer: MyQuestion["answer"] }) {
+  if (answer === null || answer.status === "pending") {
+    return <p className="muted">Looking in your lesson…</p>;
+  }
+  if (answer.status === "not_covered") {
+    return (
+      <p className="muted">
+        Your lesson doesn't cover this. Your professor has been notified.
+      </p>
+    );
+  }
+  if (answer.status === "failed") {
+    return (
+      <p className="muted">
+        Couldn't answer right now. Your professor has been notified.
+      </p>
+    );
+  }
+  return (
+    <div>
+      {answer.text && <p>{answer.text}</p>}
+      {answer.quotes.map((quote, i) => (
+        <blockquote key={i} className="quote">
+          {quote.text}
+          <cite>From {quote.label}</cite>
+        </blockquote>
+      ))}
+    </div>
   );
 }

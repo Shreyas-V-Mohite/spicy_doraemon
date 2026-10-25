@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useStore } from "../store/sessionStore";
-import { useState } from "react";
-import { errorMessage, getCourseToken } from "../lib/identity";
-import { EXCERPTS } from "../../../../convex/lib/lesson";
-import type { Suggestion } from "../types";
+import { getCourseToken } from "../lib/identity";
+import type { Question } from "../types";
 import VisualPanel from "./VisualPanel";
+
+const FLAGGED = new Set(["not_covered", "failed"]);
 
 export default function Professor() {
   const { code = "" } = useParams();
@@ -13,10 +14,7 @@ export default function Professor() {
   const token = session?.courseId ? getCourseToken(session.courseId) : null;
   const questions = store.useProfessorQuestions(session?._id, token);
   const counts = store.useFeedbackCounts(session?._id);
-  const suggestions = store.useProfessorSuggestions(session?._id, token);
   const [chosenPreview, setChosenPreview] = useState<string | null>(null);
-  const [asking, setAsking] = useState<string | null>(null);
-  const [copilotError, setCopilotError] = useState<string | null>(null);
 
   if (session === undefined) return <main className="page">Loading…</main>;
   if (session === null) {
@@ -36,23 +34,12 @@ export default function Professor() {
     );
   }
 
-  async function askCopilot(questionId: string) {
-    if (!session || !token) return;
-    setAsking(questionId);
-    setCopilotError(null);
-    try {
-      await store.askCopilot({ sessionId: session._id, token, questionId });
-    } catch (err) {
-      setCopilotError(errorMessage(err));
-    } finally {
-      setAsking(null);
-    }
-  }
-
-  const latestFor = (questionId: string): Suggestion | undefined =>
-    suggestions?.find((s) => s.questionId === questionId);
-
-  const open = questions?.filter((q) => q.status === "open") ?? [];
+  // Questions the lesson couldn't answer come first: those need the professor.
+  const open = (questions?.filter((q) => q.status === "open") ?? []).sort(
+    (a, b) =>
+      Number(FLAGGED.has(b.answerStatus ?? "")) -
+      Number(FLAGGED.has(a.answerStatus ?? "")),
+  );
   const answered = questions?.filter((q) => q.status === "answered") ?? [];
 
   return (
@@ -94,13 +81,8 @@ export default function Professor() {
             {open.map((q) => (
               <li key={q._id}>
                 <p>{q.text}</p>
+                <AnswerLine question={q} />
                 <div className="row">
-                  <button
-                    disabled={asking !== null}
-                    onClick={() => askCopilot(q._id)}
-                  >
-                    {asking === q._id ? "Thinking…" : "Ask copilot"}
-                  </button>
                   <button
                     className="secondary"
                     onClick={() =>
@@ -114,16 +96,9 @@ export default function Professor() {
                     Mark answered
                   </button>
                 </div>
-                {latestFor(q._id) && (
-                  <SuggestionCard
-                    suggestion={latestFor(q._id)!}
-                    onOpenPreview={setChosenPreview}
-                  />
-                )}
               </li>
             ))}
           </ul>
-          {copilotError && <p className="error">{copilotError}</p>}
           {answered.length > 0 && (
             <details>
               <summary>Answered ({answered.length})</summary>
@@ -151,47 +126,26 @@ export default function Professor() {
   );
 }
 
-function SuggestionCard({
-  suggestion,
-  onOpenPreview,
-}: {
-  suggestion: Suggestion;
-  onOpenPreview: (previewId: string) => void;
-}) {
+function AnswerLine({ question }: { question: Question }) {
+  const status = question.answerStatus;
+  if (status === null || status === "pending") {
+    return <p className="muted">Looking in the lesson…</p>;
+  }
+  if (FLAGGED.has(status)) {
+    return (
+      <p className="error">
+        {status === "failed" ? "Couldn't answer" : "Not covered by your lesson"}
+        {question.answerNote ? ` (${question.answerNote})` : ""}. The student was
+        told you've been notified.
+      </p>
+    );
+  }
   return (
-    <div className="suggestion">
-      <p className="suggestion-head muted">
-        Private copilot suggestion
-        {suggestion.cached && <span className="pill cached">cached</span>}
-      </p>
-      <p>{suggestion.explanation}</p>
-      <p>
-        <strong>Try:</strong> {suggestion.teachingAction}
-      </p>
-      <p className="sources">
-        {suggestion.sourceIds.map((id) => (
-          <span key={id} className="chip" title={EXCERPTS[id]}>
-            {id}
-          </span>
-        ))}
-      </p>
-      {suggestion.previewId ? (
-        <button
-          className="secondary"
-          onClick={() => onOpenPreview(suggestion.previewId!)}
-        >
-          Show verified highlight in preview
-        </button>
-      ) : suggestion.molecule ? (
-        <p className="error">
-          Highlight not verified{suggestion.note ? `: ${suggestion.note}` : ""}
-        </p>
-      ) : (
-        <p className="muted">No highlight proposed for this question.</p>
-      )}
-      {suggestion.cached && suggestion.note && !suggestion.previewId && !suggestion.molecule && (
-        <p className="muted">{suggestion.note}</p>
-      )}
-    </div>
+    <details>
+      <summary className="muted">
+        {status === "fallback" ? "Closest passage shown" : "Answered from the lesson"}
+      </summary>
+      <p>{question.answerText}</p>
+    </details>
   );
 }

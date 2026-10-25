@@ -5,11 +5,35 @@ export interface PublicSession {
   courseId?: string;
 }
 
+export type AnswerStatus =
+  | "pending"
+  | "answered"
+  | "fallback"
+  | "not_covered"
+  | "failed";
+
+// A question as the professor sees it, with how the automatic answer went.
 export interface Question {
   _id: string;
   text: string;
   status: "open" | "answered";
   _creationTime: number;
+  answerStatus: AnswerStatus | null;
+  answerNote: string | null;
+  answerText: string | null;
+}
+
+// A student's own question with the answer they were shown.
+export interface MyQuestion {
+  _id: string;
+  text: string;
+  status: "open" | "answered";
+  _creationTime: number;
+  answer: {
+    status: AnswerStatus;
+    text: string | null;
+    quotes: { label: string; text: string }[];
+  } | null;
 }
 
 export interface FeedbackCounts {

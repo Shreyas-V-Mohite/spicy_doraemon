@@ -84,4 +84,36 @@ export default defineSchema({
   })
     .index("by_session", ["sessionId"])
     .index("by_question", ["questionId"]),
+
+  // A student's answer, created "pending" with the question and filled in by
+  // an action. Students read text and quotes only; note/timings are for the
+  // professor.
+  answers: defineTable({
+    sessionId: v.id("sessions"),
+    questionId: v.id("questions"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("answered"),
+      v.literal("fallback"),
+      v.literal("not_covered"),
+      v.literal("failed"),
+    ),
+    text: v.optional(v.string()),
+    quotes: v.optional(
+      v.array(
+        v.object({
+          chunkId: v.id("lessonChunks"),
+          label: v.string(),
+          text: v.string(),
+        }),
+      ),
+    ),
+    note: v.optional(v.string()),
+    topScore: v.optional(v.number()),
+    retrievalMs: v.optional(v.number()),
+    claudeMs: v.optional(v.number()),
+    totalMs: v.optional(v.number()),
+  })
+    .index("by_question", ["questionId"])
+    .index("by_session", ["sessionId"]),
 });

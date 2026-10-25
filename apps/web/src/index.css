@@ -91,3 +91,5 @@ select { font: inherit; padding: 10px; border-radius: 8px; border: 1px solid var
 .chip { font-size: 0.75rem; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); cursor: help; }
 .pill.cached { color: var(--confused); }
 .viewer-error { margin: 8px 0 0; font-size: 0.85rem; }
+.quote { margin: 8px 0 0; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--card); font-size: 0.9rem; }
+.quote cite { display: block; margin-top: 4px; font-size: 0.75rem; color: var(--muted); font-style: normal; }

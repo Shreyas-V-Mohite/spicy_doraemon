@@ -5,6 +5,7 @@ import type {
   FeedbackCounts,
   FeedbackValue,
   Lesson,
+  MyQuestion,
   PublicSession,
   Preview,
   Question,
@@ -24,7 +25,7 @@ export interface SessionStore {
   useMyQuestions(
     sessionId: string | undefined,
     studentId: string,
-  ): Question[] | undefined;
+  ): MyQuestion[] | undefined;
   useFeedbackCounts(sessionId: string | undefined): FeedbackCounts | undefined;
   useMyVote(
     sessionId: string | undefined,

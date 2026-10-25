@@ -7,6 +7,7 @@ import { embedTexts } from "./lib/embed";
 export interface Passage {
   chunkId: Id<"lessonChunks">;
   lessonId: Id<"lessons">;
+  lessonTitle: string;
   heading: string;
   text: string;
   score: number;
@@ -19,9 +20,11 @@ export const hydrate = internalQuery({
     for (const id of args.ids) {
       const chunk = await ctx.db.get(id);
       if (chunk) {
+        const lesson = await ctx.db.get(chunk.lessonId);
         out.push({
           chunkId: chunk._id,
           lessonId: chunk.lessonId,
+          lessonTitle: lesson?.title ?? "Lesson",
           heading: chunk.heading,
           text: chunk.text,
         });
