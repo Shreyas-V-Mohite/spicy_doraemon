@@ -30,6 +30,17 @@ Be precise when asked: the answer path is one Claude step inside a fixed pipelin
 | Confused / understood | Is the class following? | Is the client following? |
 | Outcome | Everyone leaves with the same picture | The client has no open doubts and can decide yes or no |
 
+### What the live room adds to the mapping
+
+| Feature | Classroom | Sales call |
+|---|---|---|
+| PDF slides every student follows | Lecture slides | The deck or demo |
+| Professor camera and mic in the app | The lecture | The rep on the call |
+| Claude reads each slide and shares its molecule | The compound being taught | The product visual being discussed |
+| Votes per slide, "where the class got lost" | Which slides lost the class | Which parts of the pitch lost the client |
+| Escalate an AI answer, professor replies privately | A student who still wants a person | A client who wants the rep |
+| AI answers first, only the rest reach the professor | The professor keeps teaching | The rep keeps selling |
+
 The promise is a clear picture, not a closed deal. A client who decides not to buy with full understanding is also a success.
 
 ## 45-second narrative
