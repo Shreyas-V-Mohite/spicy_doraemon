@@ -25,12 +25,12 @@ The idea: an AI can help a professor teach in the moment, but it should never pu
 | Professor page | One page with a stage (join code, QR, shared molecule, votes) and a private queue of cards (not-covered first, then the most shared); Present mode |
 | Student page | Join by code, ask, vote, see answers with quotes |
 | Chemistry service | PubChem lookup by name, or a 3D structure built from SMILES; RDKit detects 20 functional groups (alcohol, phenol, ether, aldehyde, ketone, acid, ester, anhydride, acyl halide, amide, three kinds of amine, nitrile, nitro, thiol, alkyl halide, alkene, alkyne, aromatic ring) |
+| Hand gestures | A "Use hand gestures" toggle puts the professor's camera behind the molecule and lets the professor resize, rotate and move it by hand (open and close your hand, hold still and turn it, point). The camera view is meant to be screen-shared; students only get the shared molecule. Mouse and touch still work, and the camera is optional. Lives in `packages/hand-gesture` (teammate's gesture lab: MediaPipe tracking, gesture recognition). The tests cover the logic, not real hands |
 | Molecule stage | The professor loads any molecule, sees the groups found in it as chips, picks one to highlight and a display style, and shares it; the server re-verifies the highlight before students see it |
 | Shared answers | The professor can put one student's question and the answer they were shown (anonymous) on every screen |
 
 ## Not built yet
 
-- Hand gestures and the camera stage (a teammate's viewer)
 - Stable hosting: the chemistry service needs a tunnel to your machine, and the frontend is not deployed
 
 Design decisions and the data model are in `PROJECT_STRUCTURE.md`.
@@ -63,7 +63,9 @@ You need Node 20+, `uv`, and `cloudflared` (or another tunnel).
    ```
 5. Open `/professor`, enter the passcode, create a course, add the sample lesson from `samples/functional-groups.md`, and start a session. Join from another window at `/s/<CODE>` and ask "Why is acetic acid acidic?".
 
-Tests: `cd services/chem && uv run pytest`, and `npm run typecheck`.
+For hand gestures, fetch MediaPipe's model once with `npm run models -w @spicy/hand-gesture` (about 8 MB download; the camera needs localhost or HTTPS).
+
+Tests: `cd services/chem && uv run pytest`, `npm test -w @spicy/hand-gesture`, and `npm run typecheck`.
 
 ## Safety model
 
@@ -71,4 +73,4 @@ Answers come only from the professor's lessons, and every quote is checked word 
 
 ## Third-party code
 
-3Dmol.js, RDKit, PubChemPy, Voyage AI embeddings, Convex, React, FastAPI, qrcode.react. No other code is reused.
+3Dmol.js, RDKit, PubChemPy, Voyage AI embeddings, Convex, React, FastAPI, qrcode.react, MediaPipe Hand Landmarker. The hand-tracking and gesture code in `packages/hand-gesture` is from the team's Molecule Gesture Lab. No other code is reused.

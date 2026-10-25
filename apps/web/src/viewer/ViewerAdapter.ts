@@ -1,6 +1,7 @@
 // What the app needs from a molecule renderer. 3Dmol implements it today;
 // another viewer (for example the teammate's MoleculeViewer) can replace it
 // by implementing the same four methods.
+import type { GestureCommand } from "@spicy/hand-gesture";
 import type { MoleculeStyle } from "../types";
 
 export interface ViewerAdapter {
@@ -10,6 +11,8 @@ export interface ViewerAdapter {
   setHighlight(indices: readonly number[] | null): void;
   // How atoms are drawn.
   setStyle(style: MoleculeStyle): void;
+  // Moves the camera: rotate, zoom, size, move (hand gestures drive this).
+  applyCommand(command: GestureCommand): void;
   // Recentres and refits the camera.
   reset(): void;
   destroy(): void;

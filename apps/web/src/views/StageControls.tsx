@@ -1,6 +1,15 @@
+import type { TrackingPhase } from "@spicy/hand-gesture";
 import type { DetectedGroup, MoleculeStyle } from "../types";
 
 export type MoleculeInput = { kind: "name" | "smiles"; value: string };
+
+const GESTURE_STATUS: Record<TrackingPhase, string> = {
+  idle: "",
+  "loading-models": "Loading hand tracking…",
+  "requesting-camera": "Allow the camera when asked…",
+  running: "Hand tracking is on. Open and close your hand to resize, hold it still and turn it to rotate, point to move.",
+  error: "",
+};
 
 const EXAMPLES = ["ethanol", "aspirin", "ibuprofen", "caffeine", "acetone"];
 const STYLES: { id: MoleculeStyle; label: string }[] = [
@@ -26,6 +35,12 @@ interface Props {
   onShare: () => void;
   onUnshare: () => void;
   error: string | null;
+  gestures: {
+    on: boolean;
+    phase: TrackingPhase;
+    error: string | undefined;
+    onToggle: () => void;
+  };
 }
 
 // The professor's molecule controls. The chips are the groups RDKit found in
@@ -46,6 +61,7 @@ export default function StageControls({
   onShare,
   onUnshare,
   error,
+  gestures,
 }: Props) {
   return (
     <div className="stack stage-controls">
@@ -144,6 +160,17 @@ export default function StageControls({
           </button>
         )}
       </div>
+      <div className="row">
+        <button
+          className={gestures.on ? undefined : "secondary"}
+          onClick={gestures.onToggle}
+          title="Control the molecule with your hand, in front of your camera"
+        >
+          {gestures.on ? "Gestures on" : "Use hand gestures"}
+        </button>
+        {gestures.on && <span className="muted">{GESTURE_STATUS[gestures.phase]}</span>}
+      </div>
+      {gestures.error && <p className="error">{gestures.error}</p>}
       {sharedCaption && shareState === "different" && (
         <p className="muted">Students are seeing: {sharedCaption}</p>
       )}

@@ -1,0 +1,25 @@
+{
+  "name": "@spicy/hand-gesture",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hand-gesture input for the molecule stage: webcam, MediaPipe hand tracking, gesture recognition, and camera motion for a 3Dmol viewer.",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "tsx --test --test-force-exit tests/*.test.ts",
+    "typecheck": "tsc --noEmit -p .",
+    "models": "node scripts/fetch-models.mjs"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "tsx": "^4.20.0",
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
+  }
+}

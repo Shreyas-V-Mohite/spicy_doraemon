@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { useStore } from "../store/sessionStore";
 import { errorMessage, getCourseToken } from "../lib/identity";
 import type { LoadedMolecule, MoleculeStyle, Question, QueueCard } from "../types";
+import { useGestures } from "../gestures/useGestures";
 import { useTranscription } from "../transcribe/useTranscription";
 import Stage, { type ShownMolecule } from "./Stage";
 import StageControls, { type MoleculeInput } from "./StageControls";
@@ -26,6 +27,8 @@ export default function Professor() {
   const [style, setStyle] = useState<MoleculeStyle>("ball-and-stick");
   const [busy, setBusy] = useState<"load" | "share" | null>(null);
   const [stageError, setStageError] = useState<string | null>(null);
+  const [gesturesOn, setGesturesOn] = useState(false);
+  const gestures = useGestures(gesturesOn);
   const [present, setPresent] = useState(false);
   const lines = store.useTranscriptLines(session?._id, token);
   const sessionId = session?._id;
@@ -176,6 +179,7 @@ export default function Professor() {
           )}
         </div>
         <div className="counts">
+          {gestures.phase === "running" && <span className="live-dot on">Camera on</span>}
           {transcription.status === "listening" && (
             <span className="live-dot on">Transcribing</span>
           )}
@@ -205,6 +209,7 @@ export default function Professor() {
             present={present}
             shown={shown}
             sharedAnswer={sharedAnswer}
+            gestures={gestures.controller}
             onStopSharingAnswer={
               present
                 ? undefined
@@ -230,6 +235,12 @@ export default function Professor() {
                     store.unshareMolecule({ sessionId: session._id, token })
                   }
                   error={stageError}
+                  gestures={{
+                    on: gesturesOn,
+                    phase: gestures.phase,
+                    error: gestures.error,
+                    onToggle: () => setGesturesOn(!gesturesOn),
+                  }}
                 />
               )
             }

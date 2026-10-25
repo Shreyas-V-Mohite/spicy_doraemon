@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { HandGestureController } from "@spicy/hand-gesture";
 import { QRCodeSVG } from "qrcode.react";
 import type {
   FeedbackCounts,
@@ -6,6 +7,7 @@ import type {
   PublicSession,
   SharedAnswer,
 } from "../types";
+import WebcamBackdrop from "../gestures/WebcamBackdrop";
 import MoleculeView from "../viewer/MoleculeView";
 import SharedAnswerCard from "./SharedAnswerCard";
 
@@ -22,6 +24,8 @@ interface Props {
   present: boolean;
   shown: ShownMolecule | null;
   sharedAnswer: SharedAnswer | null | undefined;
+  // Hand tracking, when the professor has gestures on.
+  gestures?: HandGestureController | null;
   // Professor-only pieces, left out in Present mode.
   controls?: ReactNode;
   onStopSharingAnswer?: () => void;
@@ -35,6 +39,7 @@ export default function Stage({
   present,
   shown,
   sharedAnswer,
+  gestures,
   controls,
   onStopSharingAnswer,
 }: Props) {
@@ -65,7 +70,13 @@ export default function Stage({
       {shown ? (
         <>
           <p className="caption">{shown.caption}</p>
-          <MoleculeView sdf={shown.sdf} highlight={shown.indices} style={shown.style} />
+          <MoleculeView
+            sdf={shown.sdf}
+            highlight={shown.indices}
+            style={shown.style}
+            controller={gestures}
+            backdrop={gestures ? <WebcamBackdrop controller={gestures} /> : undefined}
+          />
         </>
       ) : (
         <p className="muted stage-empty">No molecule on stage yet.</p>

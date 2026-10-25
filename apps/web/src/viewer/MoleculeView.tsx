@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { GestureController } from "@spicy/hand-gesture";
 import type { MoleculeStyle } from "../types";
 import { ThreeDmolAdapter } from "./ThreeDmolAdapter";
 
@@ -6,10 +7,21 @@ interface Props {
   sdf: string;
   highlight: readonly number[] | null;
   style?: MoleculeStyle;
+  // When given, its hand commands move this molecule (the same viewer the
+  // mouse uses, so there is one renderer and one source of truth).
+  controller?: GestureController | null;
+  // Drawn behind the molecule, e.g. the professor's camera feed.
+  backdrop?: ReactNode;
 }
 
 // Rotate, zoom and pan come from 3Dmol's mouse and touch handling.
-export default function MoleculeView({ sdf, highlight, style = "ball-and-stick" }: Props) {
+export default function MoleculeView({
+  sdf,
+  highlight,
+  style = "ball-and-stick",
+  controller = null,
+  backdrop,
+}: Props) {
   const container = useRef<HTMLDivElement>(null);
   const adapter = useRef<ThreeDmolAdapter | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -57,8 +69,15 @@ export default function MoleculeView({ sdf, highlight, style = "ball-and-stick" 
     adapter.current?.setStyle(style);
   }, [style]);
 
+  // Hand commands go to the viewer's camera.
+  useEffect(() => {
+    if (!controller) return;
+    return controller.subscribe((command) => adapter.current?.applyCommand(command));
+  }, [controller]);
+
   return (
-    <div className="viewer-wrap">
+    <div className={backdrop ? "viewer-wrap with-camera" : "viewer-wrap"}>
+      {backdrop}
       <div ref={container} className="viewer" />
       {failed && (
         <p className="error viewer-error">

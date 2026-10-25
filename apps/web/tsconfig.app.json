@@ -19,7 +19,8 @@
     /* Linting */
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
+    // The hand-gesture package uses constructor parameter properties; Vite compiles them fine.
+    "erasableSyntaxOnly": false,
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src", "../../convex/_generated"]

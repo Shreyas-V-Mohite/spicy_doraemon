@@ -22,7 +22,8 @@ A live organic-chemistry classroom assistant. Students ask questions during a le
 | Privacy | Professor-only data (queue, reasons, timings) needs the course token. Students read only status, answer text and quotes for their own questions |
 | Chemistry | FastAPI (`uv`, Python 3.12, PubChemPy, RDKit) is the only PubChem client and the only producer of atom indices |
 | Stage | The professor's stage is local: load any molecule by name or SMILES (SMILES builds a 3D structure with RDKit when PubChem has none), pick from the groups RDKit detected, choose a style. "Share molecule" sends only the input; the server re-fetches and re-verifies the highlight, so indices never come from the browser. "Share answer" is separate. Students receive the molecule, highlight and style, not live rotation |
-| Viewer | 3Dmol.js 2.5.5 behind our own `ViewerAdapter` (load SDF, highlight by atom index, style, reset). The teammate's gesture/camera viewer plugs in later |
+| Hand gestures | The teammate's gesture lab is kept as the package `packages/hand-gesture`, used as an input only: it produces rotate/zoom/size/move commands and `ViewMotion` applies them to **our** 3Dmol viewer, so there is one renderer and one source of truth for highlights. Students don't see live rotation: the professor screen-shares the camera view, and students get the shared molecule through Convex. Not brought in: the lab's multi-molecule scene, SpacetimeDB, voice, RTMPose |
+| Viewer | 3Dmol.js 2.5.5 behind our own `ViewerAdapter` (load SDF, highlight by atom index, style, gesture commands, reset). |
 
 ## Repository layout
 
@@ -56,6 +57,7 @@ A live organic-chemistry classroom assistant. Students ask questions during a le
 │       ├── views/           # Home, ProfessorStart, CoursePage, LessonForm, Professor,
 │       │                    # Stage, StageControls, SharedAnswerCard, TranscriptPanel, Student
 │       └── transcribe/      # Transcriber interface, Web Speech implementation, hook
+├── packages/hand-gesture/   # webcam + MediaPipe + gestures -> commands; ViewMotion applies them to our 3Dmol viewer
 ├── services/chem/           # FastAPI: /molecule, /highlight (name or SMILES), /groups; 20 RDKit SMARTS groups
 └── samples/functional-groups.md   # sample lesson for trying the system
 ```
@@ -93,9 +95,9 @@ Student sees the result live; professor sees flags first in the queue
 
 ## Status
 
-Built and tested: session memory for follow-ups, the stage rework (any molecule by name or SMILES, 20 auto-detected groups, display styles, server-verified sharing, shareable answers), live lecture transcription (editable lines, chunk search across sessions, recent window, lesson-wins conflict handling), similar-question grouping (distinct-student counts, labels, split, group "mark answered", answer reuse, the students' classmates hint), courses and professor auth, lesson upload and editing with embeddings, retrieval, the answer pipeline with quote verification, limits, the merged professor page with Present mode and QR, student answers, the chemistry service, molecule preview and sharing, vote reset.
+Built and tested: hand-gesture control of the stage (logic and wiring tested without a camera; real hands and lighting not yet tried), session memory for follow-ups, the stage rework (any molecule by name or SMILES, 20 auto-detected groups, display styles, server-verified sharing, shareable answers), live lecture transcription (editable lines, chunk search across sessions, recent window, lesson-wins conflict handling), similar-question grouping (distinct-student counts, labels, split, group "mark answered", answer reuse, the students' classmates hint), courses and professor auth, lesson upload and editing with embeddings, retrieval, the answer pipeline with quote verification, limits, the merged professor page with Present mode and QR, student answers, the chemistry service, molecule preview and sharing, vote reset.
 
-Planned next (in order): the stage rework (any molecule by name or SMILES, about 20 auto-detected functional groups, separate "share molecule" and "share answer"); session memory in prompts; the teammate's gesture viewer; hosting.
+Planned next: hosting (a fixed home for the chemistry service, frontend hosting so students can open the QR code, a production Convex deployment), tuning the thresholds on real classroom questions, and trying the hand gestures with a real camera.
 
 Dropped: the private copilot, concept cards, the understanding check, voice commands, and the Droid observability agent (Factory's service was unavailable). Answer timings are stored on each answer instead.
 
