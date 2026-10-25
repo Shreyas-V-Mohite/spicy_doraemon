@@ -4,6 +4,8 @@ A live organic-chemistry classroom that runs in the browser. The professor teach
 
 An AI can help a professor teach in the moment, but it should never put an unchecked claim in front of students. **Claude proposes, code verifies, and the professor decides what the whole class sees.**
 
+**Live app: https://spicy-doraemon.vercel.app** (professors sign in at `/professor`, students join at `/s/<CODE>`).
+
 ## The idea: one workflow, two rooms
 
 The goal is the same on both sides of the room: the person explaining and the people listening end up with the same understanding. The classroom is the proof case. Swap the lessons for a product doc set and the student for a client, and the same workflow is a sales call where the client's doubts are cleared and they can decide, yes or no, with a clear picture of what the product does.
@@ -88,7 +90,7 @@ Tests: `cd services/chem && uv run pytest`, `npm test -w @spicy/hand-gesture`, `
 
 ## Future work
 
-- **Deploy for real.** Host the chemistry service and web app permanently, and try the live room (camera, relay, slide reading) on real classroom networks.
+- **Harden the deployment.** The web app is live on Vercel. Make sure the chemistry service has stable hosting too, and try the live room (camera, relay, slide reading) on real classroom networks.
 - **Measure on real data.** Re-run `scripts/eval.mjs` on a real lesson and real questions, since the answer thresholds were tuned on a synthetic one.
 - **Real-world gesture testing.** The gesture logic is tested, but not yet with real hands and lighting.
 - **Smarter agents.** Ideas we have discussed, not built: a router that classifies each question (new, follow-up, logistics, off-topic), a critic that checks an answer is really supported by its quotes, a professor-side suggestion agent, and a gap agent that drafts new lesson passages from uncovered questions.
