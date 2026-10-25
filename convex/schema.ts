@@ -50,9 +50,32 @@ export default defineSchema({
     studentId: v.string(),
     text: v.string(),
     status: v.union(v.literal("open"), v.literal("answered")),
+    // Set when a similar question from this session was found.
+    groupId: v.optional(v.id("questionGroups")),
   })
     .index("by_session", ["sessionId"])
-    .index("by_session_and_student", ["sessionId", "studentId"]),
+    .index("by_session_and_student", ["sessionId", "studentId"])
+    .index("by_group", ["groupId"]),
+
+  // Embeddings of questions, kept apart so reading questions stays light.
+  questionVectors: defineTable({
+    questionId: v.id("questions"),
+    sessionId: v.id("sessions"),
+    embedding: v.array(v.float64()),
+  })
+    .index("by_question", ["questionId"])
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 1024,
+      filterFields: ["sessionId"],
+    }),
+
+  // Similar questions in one session. Groups with one question don't exist.
+  questionGroups: defineTable({
+    sessionId: v.id("sessions"),
+    firstQuestionId: v.id("questions"),
+    label: v.optional(v.string()),
+  }).index("by_session", ["sessionId"]),
 
   feedback: defineTable({
     sessionId: v.id("sessions"),
@@ -92,6 +115,8 @@ export default defineSchema({
       ),
     ),
     note: v.optional(v.string()),
+    // Set when the answer was copied from a near-identical earlier question.
+    reusedFrom: v.optional(v.id("questions")),
     topScore: v.optional(v.number()),
     retrievalMs: v.optional(v.number()),
     claudeMs: v.optional(v.number()),

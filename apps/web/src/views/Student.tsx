@@ -101,6 +101,13 @@ export default function Student() {
                 <p>
                   <strong>{q.text}</strong>
                 </p>
+                {q.similarCount > 0 && (
+                  <p className="muted">
+                    {q.similarCount === 1
+                      ? "1 classmate asked something similar"
+                      : `${q.similarCount} classmates asked something similar`}
+                  </p>
+                )}
                 <AnswerCard answer={q.answer} />
               </li>
             ))}

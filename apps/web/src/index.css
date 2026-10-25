@@ -97,3 +97,4 @@ select { font: inherit; padding: 10px; border-radius: 8px; border: 1px solid var
 .present-mode .join-url { font-size: 1.4rem; }
 .present-mode .counts .pill { font-size: 1.2rem; padding: 8px 18px; }
 .present-grid { display: grid; grid-template-columns: 1fr; }
+.list li.flagged { border-color: var(--confused); }

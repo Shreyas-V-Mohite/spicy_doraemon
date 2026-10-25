@@ -5,6 +5,8 @@ import type { Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { ANSWER_SCHEMA, ANSWER_SYSTEM } from "./ai/answerPrompt";
 import { quoteAppears } from "./lib/verify";
+import { GROUP_THRESHOLD, REUSE_THRESHOLD } from "./grouping";
+import { embedTexts } from "./lib/embed";
 import { searchLessons, type Passage } from "./retrieval";
 
 const MODEL = "claude-sonnet-5-5";
@@ -34,7 +36,12 @@ export const getJob = internalQuery({
       ctx.db.get(answer.sessionId),
     ]);
     if (question === null || session?.courseId === undefined) return null;
-    return { question: question.text, courseId: session.courseId };
+    return {
+      question: question.text,
+      questionId: question._id,
+      sessionId: answer.sessionId,
+      courseId: session.courseId,
+    };
   },
 });
 
@@ -58,6 +65,7 @@ export const finish = internalMutation({
       ),
     ),
     note: v.optional(v.string()),
+    reusedFrom: v.optional(v.id("questions")),
     topScore: v.optional(v.number()),
     retrievalMs: v.optional(v.number()),
     claudeMs: v.optional(v.number()),
@@ -142,6 +150,7 @@ export const generate = internalAction({
       text?: string;
       quotes?: Quote[];
       note?: string;
+      reusedFrom?: Id<"questions">;
       topScore?: number;
       retrievalMs?: number;
       claudeMs?: number;
@@ -156,9 +165,64 @@ export const generate = internalAction({
       const job = await ctx.runQuery(internal.answers.getJob, { answerId });
       if (job === null) return;
 
+      // Embed once: the same vector finds similar questions and lesson passages.
+      let vector: number[];
+      try {
+        [vector] = await embedTexts([job.question], "query");
+      } catch (err) {
+        await done({ status: "failed", note: `Search failed: ${String(err).slice(0, 150)}` });
+        return;
+      }
+
+      // Similar earlier questions in this session: group with them, and
+      // reuse a verified answer if one is nearly identical.
+      const hits = await ctx.vectorSearch("questionVectors", "by_embedding", {
+        vector,
+        limit: 5,
+        filter: (q) => q.eq("sessionId", job.sessionId),
+      });
+      const neighbors = await ctx.runQuery(internal.grouping.neighborInfo, {
+        vectorIds: hits.map((h) => h._id),
+      });
+      const scored = hits.flatMap((h) => {
+        const info = neighbors.find((n) => n.vectorId === h._id);
+        return info ? [{ ...info, score: h._score }] : [];
+      });
+      const groupWith = scored.find((n) => n.score >= GROUP_THRESHOLD);
+      const reuseFrom = scored.find(
+        (n) =>
+          n.score >= REUSE_THRESHOLD &&
+          n.answerStatus === "answered" &&
+          n.answerText !== null &&
+          n.answerQuotes !== null,
+      );
+      const group = await ctx.runMutation(internal.grouping.assign, {
+        questionId: job.questionId,
+        sessionId: job.sessionId,
+        embedding: vector,
+        neighborQuestionId: groupWith?.questionId ?? null,
+      });
+      if (group && group.students >= 2 && !group.labelled) {
+        await ctx.scheduler.runAfter(0, internal.grouping.labelGroup, {
+          groupId: group.groupId,
+        });
+      }
+
+      if (reuseFrom) {
+        await done({
+          status: "answered",
+          text: reuseFrom.answerText!,
+          quotes: reuseFrom.answerQuotes!,
+          note: "Reused from a near-identical question",
+          reusedFrom: reuseFrom.questionId,
+          topScore: reuseFrom.score,
+        });
+        return;
+      }
+
       let passages: Passage[];
       try {
-        passages = await searchLessons(ctx, job.courseId, job.question, PASSAGES_FOR_CLAUDE);
+        passages = await searchLessons(ctx, job.courseId, vector, PASSAGES_FOR_CLAUDE);
       } catch (err) {
         await done({ status: "failed", note: `Search failed: ${String(err).slice(0, 150)}` });
         return;

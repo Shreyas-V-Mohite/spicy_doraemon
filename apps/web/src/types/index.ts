@@ -23,12 +23,26 @@ export interface Question {
   answerText: string | null;
 }
 
+// One card in the professor's queue: a single question, or several students'
+// similar questions grouped together.
+export interface QueueCard {
+  key: string;
+  groupId: string | null;
+  label: string | null;
+  studentCount: number;
+  open: boolean;
+  flagged: boolean;
+  members: Question[];
+}
+
 // A student's own question with the answer they were shown.
 export interface MyQuestion {
   _id: string;
   text: string;
   status: "open" | "answered";
   _creationTime: number;
+  // Other students who asked something similar (a count only).
+  similarCount: number;
   answer: {
     status: AnswerStatus;
     text: string | null;

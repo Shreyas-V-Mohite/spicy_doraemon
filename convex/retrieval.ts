@@ -38,10 +38,9 @@ export const hydrate = internalQuery({
 export async function searchLessons(
   ctx: ActionCtx,
   courseId: Id<"courses">,
-  question: string,
+  vector: number[],
   limit = 6,
 ): Promise<Passage[]> {
-  const [vector] = await embedTexts([question], "query");
   const hits = await ctx.vectorSearch("lessonChunks", "by_embedding", {
     vector,
     limit,
@@ -61,7 +60,8 @@ export async function searchLessons(
 export const search = internalAction({
   args: { courseId: v.id("courses"), question: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const passages = await searchLessons(ctx, args.courseId, args.question, args.limit);
+    const [vector] = await embedTexts([args.question], "query");
+    const passages = await searchLessons(ctx, args.courseId, vector, args.limit);
     return passages.map((p) => ({
       score: Number(p.score.toFixed(3)),
       heading: p.heading,

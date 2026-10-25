@@ -12,6 +12,7 @@ import type * as ai_answerPrompt from "../ai/answerPrompt.js";
 import type * as answers from "../answers.js";
 import type * as courses from "../courses.js";
 import type * as feedback from "../feedback.js";
+import type * as grouping from "../grouping.js";
 import type * as lessons from "../lessons.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_chem from "../lib/chem.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   answers: typeof answers;
   courses: typeof courses;
   feedback: typeof feedback;
+  grouping: typeof grouping;
   lessons: typeof lessons;
   "lib/auth": typeof lib_auth;
   "lib/chem": typeof lib_chem;

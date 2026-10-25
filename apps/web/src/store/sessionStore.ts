@@ -8,7 +8,7 @@ import type {
   MyQuestion,
   PublicSession,
   Preview,
-  Question,
+  QueueCard,
   Visual,
 } from "../types";
 
@@ -17,10 +17,10 @@ import type {
 // Hook members follow React's rules: call them unconditionally.
 export interface SessionStore {
   useSession(code: string): PublicSession | null | undefined;
-  useProfessorQuestions(
+  useProfessorQueue(
     sessionId: string | undefined,
     token: string | null,
-  ): Question[] | undefined;
+  ): QueueCard[] | undefined;
   useMyQuestions(
     sessionId: string | undefined,
     studentId: string,
@@ -107,6 +107,16 @@ export interface SessionStore {
   }): Promise<void>;
   unpublish(args: { sessionId: string; token: string }): Promise<void>;
   resetFeedback(args: { sessionId: string; token: string }): Promise<void>;
+  markGroupAnswered(args: {
+    sessionId: string;
+    token: string;
+    groupId: string;
+  }): Promise<void>;
+  splitFromGroup(args: {
+    sessionId: string;
+    token: string;
+    questionId: string;
+  }): Promise<void>;
   markAnswered(args: {
     sessionId: string;
     token: string;

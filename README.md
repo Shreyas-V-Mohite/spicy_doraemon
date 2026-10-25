@@ -19,14 +19,14 @@ The idea: an AI can help a professor teach in the moment, but it should never pu
 | Courses and sign-in | Passcode, per-course browser tokens, course list, past sessions |
 | Lessons | Upload or paste, passage preview, edit (unchanged passages keep their embeddings), delete; up to 50,000 words |
 | Automatic answers | Vector search plus Claude, quotes verified word for word, "not covered" flags, slow-Claude fallback, 20s cooldown and question caps |
-| Professor page | One page with a stage (join code, QR, shared molecule, votes) and a private queue; Present mode |
+| Similar questions | Questions that mean the same thing are grouped into one card with a distinct-student count and a short label; a near-identical question reuses the verified answer; students see "N classmates asked something similar" |
+| Professor page | One page with a stage (join code, QR, shared molecule, votes) and a private queue of cards (not-covered first, then the most shared); Present mode |
 | Student page | Join by code, ask, vote, see answers with quotes |
 | Chemistry service | PubChem lookup, RDKit functional-group matching for hydroxyl, carboxylic acid and ester |
 | Molecule sharing | 3D view with highlighted atoms; preview, then publish to students |
 
 ## Not built yet
 
-- Grouping similar questions, and the "classmates asked something similar" hint
 - Live lecture transcription as a second answer source
 - Any molecule by name or SMILES, and about 20 auto-detected functional groups
 - Session memory for follow-up questions

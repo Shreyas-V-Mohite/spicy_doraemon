@@ -16,6 +16,8 @@ export function useConvexStore(): SessionStore {
   const submit = useMutation(api.questions.submit);
   const setVote = useMutation(api.feedback.set);
   const answer = useMutation(api.questions.markAnswered);
+  const answerGroup = useMutation(api.questions.markGroupAnswered);
+  const split = useMutation(api.questions.splitFromGroup);
   const resetVotes = useMutation(api.feedback.reset);
   const build = useAction(api.visuals.buildPreview);
   const publishPreview = useMutation(api.visuals.publish);
@@ -23,9 +25,9 @@ export function useConvexStore(): SessionStore {
 
   return {
     useSession: (code) => useQuery(api.sessions.getByCode, { code }),
-    useProfessorQuestions: (sessionId, token) =>
+    useProfessorQueue: (sessionId, token) =>
       useQuery(
-        api.questions.listForProfessor,
+        api.questions.queue,
         sessionId && token ? { sessionId: sid(sessionId), token } : "skip",
       ),
     useMyQuestions: (sessionId, studentId) =>
@@ -127,6 +129,20 @@ export function useConvexStore(): SessionStore {
     },
     resetFeedback: async ({ sessionId, token }) => {
       await resetVotes({ sessionId: sid(sessionId), token });
+    },
+    markGroupAnswered: async ({ sessionId, token, groupId }) => {
+      await answerGroup({
+        sessionId: sid(sessionId),
+        token,
+        groupId: groupId as Id<"questionGroups">,
+      });
+    },
+    splitFromGroup: async ({ sessionId, token, questionId }) => {
+      await split({
+        sessionId: sid(sessionId),
+        token,
+        questionId: questionId as Id<"questions">,
+      });
     },
     markAnswered: async ({ sessionId, token, questionId }) => {
       await answer({

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useStore } from "../store/sessionStore";
 import { getCourseToken } from "../lib/identity";
-import type { Question } from "../types";
+import type { Question, QueueCard } from "../types";
 import Stage from "./Stage";
 import VisualPanel from "./VisualPanel";
 
@@ -13,7 +13,7 @@ export default function Professor() {
   const store = useStore();
   const session = store.useSession(code);
   const token = session?.courseId ? getCourseToken(session.courseId) : null;
-  const questions = store.useProfessorQuestions(session?._id, token);
+  const queue = store.useProfessorQueue(session?._id, token);
   const counts = store.useFeedbackCounts(session?._id);
   const visual = store.useCurrentVisual(session?._id);
   const [chosenPreview, setChosenPreview] = useState<string | null>(null);
@@ -45,13 +45,26 @@ export default function Professor() {
     );
   }
 
-  // Questions the lesson couldn't answer come first: those need the professor.
-  const open = (questions?.filter((q) => q.status === "open") ?? []).sort(
-    (a, b) =>
-      Number(FLAGGED.has(b.answerStatus ?? "")) -
-      Number(FLAGGED.has(a.answerStatus ?? "")),
-  );
-  const answered = questions?.filter((q) => q.status === "answered") ?? [];
+  // The server already puts cards that need the professor first.
+  const open = queue?.filter((c) => c.open) ?? [];
+  const done = queue?.filter((c) => !c.open) ?? [];
+
+  async function markDone(card: QueueCard) {
+    if (!session || !token) return;
+    if (card.groupId) {
+      await store.markGroupAnswered({
+        sessionId: session._id,
+        token,
+        groupId: card.groupId,
+      });
+    } else {
+      await store.markAnswered({
+        sessionId: session._id,
+        token,
+        questionId: card.members[0]._id,
+      });
+    }
+  }
 
   return (
     <main className={present ? "page present-mode" : "page"}>
@@ -91,39 +104,35 @@ export default function Professor() {
         {!present && (
           <section>
             <h2>Question queue ({open.length})</h2>
-            {questions === undefined && <p className="muted">Loading…</p>}
-            {questions && open.length === 0 && (
+            {queue === undefined && <p className="muted">Loading…</p>}
+            {queue && open.length === 0 && (
               <p className="muted">No open questions yet.</p>
             )}
             <ul className="list">
-              {open.map((q) => (
-                <li key={q._id}>
-                  <p>{q.text}</p>
-                  <AnswerLine question={q} />
-                  <div className="row">
-                    <button
-                      className="secondary"
-                      onClick={() =>
-                        store.markAnswered({
-                          sessionId: session._id,
-                          token,
-                          questionId: q._id,
-                        })
-                      }
-                    >
-                      Mark answered
-                    </button>
-                  </div>
+              {open.map((card) => (
+                <li key={card.key} className={card.flagged ? "flagged" : undefined}>
+                  <QuestionCard
+                    card={card}
+                    onDone={() => markDone(card)}
+                    onSplit={(questionId) =>
+                      store.splitFromGroup({
+                        sessionId: session._id,
+                        token,
+                        questionId,
+                      })
+                    }
+                  />
                 </li>
               ))}
             </ul>
-            {answered.length > 0 && (
+            {done.length > 0 && (
               <details>
-                <summary>Answered ({answered.length})</summary>
+                <summary>Answered ({done.length})</summary>
                 <ul className="list">
-                  {answered.map((q) => (
-                    <li key={q._id} className="muted">
-                      {q.text}
+                  {done.map((card) => (
+                    <li key={card.key} className="muted">
+                      {card.label ?? card.members[0].text}
+                      {card.studentCount > 1 && ` · ${card.studentCount} students`}
                     </li>
                   ))}
                 </ul>
@@ -140,6 +149,58 @@ export default function Professor() {
         )}
       </div>
     </main>
+  );
+}
+
+function QuestionCard({
+  card,
+  onDone,
+  onSplit,
+}: {
+  card: QueueCard;
+  onDone: () => void;
+  onSplit: (questionId: string) => void;
+}) {
+  const grouped = card.members.length > 1;
+  const openMembers = card.members.filter((m) => m.status === "open");
+  // Show the answer that needs attention, else the original (oldest) one.
+  const rep =
+    openMembers.find((m) => FLAGGED.has(m.answerStatus ?? "")) ??
+    card.members[card.members.length - 1];
+  return (
+    <>
+      <p>
+        <strong>{card.label ?? rep.text}</strong>{" "}
+        {card.studentCount > 1 && (
+          <span className="pill confused">{card.studentCount} students</span>
+        )}
+      </p>
+      <AnswerLine question={rep} />
+      {grouped && (
+        <details>
+          <summary className="muted">All {card.members.length} questions</summary>
+          <ul className="list">
+            {card.members.map((m) => (
+              <li key={m._id}>
+                <p>{m.text}</p>
+                <button
+                  className="secondary"
+                  onClick={() => onSplit(m._id)}
+                  title="This question is not the same as the others"
+                >
+                  Split out
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      <div className="row">
+        <button className="secondary" onClick={onDone}>
+          {grouped ? "Mark all answered" : "Mark answered"}
+        </button>
+      </div>
+    </>
   );
 }
 

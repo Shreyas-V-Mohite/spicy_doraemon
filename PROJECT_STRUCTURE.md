@@ -12,6 +12,7 @@ A live organic-chemistry classroom assistant. Students ask questions during a le
 | Answer source | The course's uploaded lessons (and, later, live lecture transcripts). Nothing else |
 | Retrieval | Convex native vector index (`lessonChunks.by_embedding`, filtered by `courseId`). Embeddings: Voyage `voyage-4-lite`, 1024 dims. Keys made in MongoDB Atlas (`al-…`) use `ai.mongodb.com`; the client picks the endpoint from the key prefix |
 | Answer generation | Claude (`claude-sonnet-5-5`, structured output, thinking off, low effort, 10s timeout) writes 2-3 sentences plus quotes. The server checks every quote appears word for word in the passage it names. A failed check means "not covered", never an unverified answer |
+| Similar questions | Grouped per session by embedding similarity (>= 0.88, strict on purpose: a missed merge costs little, a false one hides a question); counted by distinct students; the professor can split a question out; a near-identical question (>= 0.97) reuses a verified answer. Thresholds come from a small sample and need tuning on real questions |
 | Not covered | Student sees "Your lesson doesn't cover this. Your professor has been notified." The professor's queue pins these first, with the reason |
 | Slow Claude | Student gets the closest passage verbatim, labelled |
 | Limits | 20 questions per student per session, 20s cooldown, 300 questions per session |
@@ -28,6 +29,7 @@ A live organic-chemistry classroom assistant. Students ask questions during a le
 │   ├── sessions.ts          # create (course token), getByCode (public), listForCourse
 │   ├── lessons.ts           # upload, edit (reuses unchanged embeddings), delete, list
 │   ├── retrieval.ts         # vector search over a course's passages
+│   ├── grouping.ts          # similar-question groups, thresholds, group labels
 │   ├── answers.ts           # the answer pipeline (internal action)
 │   ├── questions.ts         # submit (limits, schedules the answer), queues
 │   ├── feedback.ts          # confused/understood, counts, mine, reset
@@ -56,6 +58,7 @@ A live organic-chemistry classroom assistant. Students ask questions during a le
 | `sessions` | join code is public | code, topic, course |
 | `questions` | professor all; student own | text, status |
 | `answers` | student: status, text, quotes; professor: also reason and timings | one per question |
+| `questionVectors`, `questionGroups` | professor/internal | question embeddings (vector index per session); groups of similar questions with a label |
 | `feedback` | counts public; student reads own vote | confused / understood; professor can reset |
 | `previews`, `published_visuals` | previews private; published public | molecule SDF plus RDKit-verified atom indices |
 
@@ -63,7 +66,9 @@ A live organic-chemistry classroom assistant. Students ask questions during a le
 
 ```
 Student submits -> question + pending answer saved, answer action scheduled
-  1. embed the question (Voyage, "query")      ~120ms with search
+  1. embed the question once (Voyage, "query")
+  1b. search this session's earlier questions: >= 0.88 similar -> same group (label written by
+      Claude once two students share it); >= 0.97 and already answered -> copy that verified answer
   2. vector search the course's passages; below score 0.25 -> not covered (no Claude call)
   3. Claude answers from the passages with exact quotes (retry once on a fast failure)
   4. verify every quote -> answered | not covered
@@ -73,9 +78,9 @@ Student sees the result live; professor sees flags first in the queue
 
 ## Status
 
-Built and tested: courses and professor auth, lesson upload and editing with embeddings, retrieval, the answer pipeline with quote verification, limits, the merged professor page with Present mode and QR, student answers, the chemistry service, molecule preview and sharing, vote reset.
+Built and tested: similar-question grouping (distinct-student counts, labels, split, group "mark answered", answer reuse, the students' classmates hint), courses and professor auth, lesson upload and editing with embeddings, retrieval, the answer pipeline with quote verification, limits, the merged professor page with Present mode and QR, student answers, the chemistry service, molecule preview and sharing, vote reset.
 
-Planned next (in order): similar-question grouping with answer reuse and the "classmates asked" hint; live lecture transcription feeding the same search (with the last two minutes of raw transcript in the prompt); the stage rework (any molecule by name or SMILES, about 20 auto-detected functional groups, separate "share molecule" and "share answer"); session memory in prompts; the teammate's gesture viewer; hosting.
+Planned next (in order): live lecture transcription feeding the same search (with the last two minutes of raw transcript in the prompt); the stage rework (any molecule by name or SMILES, about 20 auto-detected functional groups, separate "share molecule" and "share answer"); session memory in prompts; the teammate's gesture viewer; hosting.
 
 Dropped: the private copilot, concept cards, the understanding check, voice commands, and the Droid observability agent (Factory's service was unavailable). Answer timings are stored on each answer instead.
 
