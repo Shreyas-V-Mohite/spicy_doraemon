@@ -2,6 +2,8 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireProfessor } from "./lib/auth";
 
+const MAX_QUESTIONS_PER_STUDENT = 20;
+
 export const submit = mutation({
   args: { sessionId: v.id("sessions"), studentId: v.string(), text: v.string() },
   handler: async (ctx, args) => {
@@ -11,6 +13,15 @@ export const submit = mutation({
     }
     if (!(await ctx.db.get(args.sessionId))) {
       throw new ConvexError("Session not found");
+    }
+    const open = await ctx.db
+      .query("questions")
+      .withIndex("by_session_and_student", (q) =>
+        q.eq("sessionId", args.sessionId).eq("studentId", args.studentId),
+      )
+      .take(MAX_QUESTIONS_PER_STUDENT);
+    if (open.length >= MAX_QUESTIONS_PER_STUDENT) {
+      throw new ConvexError("Question limit reached for this session");
     }
     await ctx.db.insert("questions", {
       sessionId: args.sessionId,

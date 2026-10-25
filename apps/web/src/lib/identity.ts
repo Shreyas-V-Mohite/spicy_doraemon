@@ -36,14 +36,6 @@ export function getProfessorToken(code: string): string | null {
   return read(`professorToken:${code}`);
 }
 
-export function getMyVote(code: string): string | null {
-  return read(`vote:${code}`);
-}
-
-export function saveMyVote(code: string, value: string) {
-  write(`vote:${code}`, value);
-}
-
 export function errorMessage(err: unknown): string {
   if (err instanceof ConvexError && typeof err.data === "string") return err.data;
   return "Something went wrong. Try again.";

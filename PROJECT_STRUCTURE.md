@@ -14,14 +14,14 @@ First milestone: student asks → professor gets a private Claude suggestion →
 | Privacy | Professor-only and public data live in separate tables. Students and the presentation view can only call public queries |
 | Auth | One professor passcode, checked in a mutation, plus a random token in `localStorage`. Students join with a code and no account |
 | Copilot trigger | Professor clicks "Ask copilot". Nothing runs or publishes automatically |
-| Claude call | One call with forced tool-use JSON, `claude-sonnet-5-5`, `max_tokens` about 300, 3s timeout. Retry once only on a fast error. Timeout goes straight to the cached suggestion (labelled "cached") |
-| Viewer | 3Dmol.js 2.5.5 behind our own `ViewerAdapter`. It loads only the SDF payload FastAPI returns. The teammate's `MoleculeViewer` can replace it later (on hold) |
+| Claude call | One structured-output call (JSON schema; Sonnet 5.5 rejects forced tool use), `claude-sonnet-5-5`, thinking off (`between_tools`), effort `low`, `max_tokens` 400, 10s timeout (`CLAUDE_TIMEOUT_MS` in `convex/copilot.ts`). Retry once only on a fast error. A timeout goes straight to a cached suggestion (labelled "cached", with the reason in `note`); questions no canned answer fits get a generic no-highlight suggestion |
+| Viewer | 3Dmol.js 2.5.5 behind our own `ViewerAdapter`. It loads only the SDF payload FastAPI returns, with `keepH` and highlights selected by `serial` (= SDF atom position = RDKit index). The teammate's `MoleculeViewer` can replace it later (on hold) |
 | Voice | Professor console only. Web Speech API → name → FastAPI resolve → private preview → explicit publish |
 | Observability | Every pipeline step writes a row to `traces`. A separate Node script using `@factory/droid-sdk` analyses traces and writes `trace_insights`. Dev-only tab, off the critical path |
 | Database portability | A `sessionStore` interface wraps all shared-state access. Convex implements it. SpacetimeDB is on hold |
 | Hosting | Frontend on Vercel (students join from phones by code or QR). Convex hosted. FastAPI behind a tunnel for now, URL stored as a Convex env var |
 | Lesson | Ethanol (hydroxyl), acetic acid (carboxyl), aspirin (carboxyl + ester). Three groups, about five excerpts with IDs. Demo question: "why is acetic acid acidic?" |
-| Reuse | Only the original `index.html` viewer, credited in the README. Nothing from `TA-da-main.zip` |
+| Reuse | No code reused: the original `index.html` Three.js viewer and `TA-da-main.zip` were not ported. Libraries only (3Dmol.js, RDKit, PubChemPy, Convex, React) |
 
 ## Repository layout
 
@@ -34,40 +34,27 @@ spicy_doraemon/
 │
 ├── convex/                      # backend hub (TypeScript)
 │   ├── schema.ts                # tables below
-│   ├── sessions.ts              # create/join session, professor auth, context
-│   ├── questions.ts             # submit, list (professor queue), group
-│   ├── feedback.ts              # confused/understood + aggregate counts
-│   ├── suggestions.ts           # professor-only suggestions
-│   ├── visuals.ts               # preview and publish; public published_visuals
-│   ├── cards.ts                 # concept cards: draft → published
-│   ├── traces.ts                # trace writes, insights reads
-│   ├── ai/
-│   │   ├── copilot.ts           # action: Claude call → validate → FastAPI → save
-│   │   ├── cards.ts             # action: transcript chunk → draft cards
-│   │   ├── prompts.ts           # fixed prompts and JSON schemas
-│   │   └── fallback.ts          # cached suggestion for the rehearsed question
+│   ├── sessions.ts              # create (passcode) / getByCode (public)
+│   ├── questions.ts             # submit (capped), listMine, professor queue, markAnswered
+│   ├── feedback.ts              # confused/understood, counts, mine, reset
+│   ├── copilot.ts               # Claude call, validation, fallback, suggestions
+│   ├── visuals.ts               # buildPreview, publish, unpublish, current
+│   ├── ai/prompts.ts            # copilot system prompt and JSON schema
 │   ├── lib/
 │   │   ├── auth.ts              # requireProfessor(token)
-│   │   └── chem.ts              # FastAPI client (URL from env)
+│   │   ├── chem.ts              # chemistry service client and response checks
+│   │   ├── lesson.ts            # excerpts, molecules, groups, cached fallbacks
+│   │   └── visual.ts            # shared validator for previews / published visuals
 │   └── _generated/              # do not edit
 │
-├── apps/web/                    # React + TypeScript (Vite)
+├── apps/web/                    # React + TypeScript (Vite), vercel.json for SPA routing
 │   └── src/
-│       ├── main.tsx
-│       ├── views/
-│       │   ├── Professor.tsx    # queue, copilot, preview/publish, cards, voice
-│       │   ├── Student.tsx      # join, ask, confused/understood, see published
-│       │   ├── Presentation.tsx # public visual, QR code, optional gestures
-│       │   └── Insights.tsx     # dev-only observability tab
-│       ├── store/
-│       │   ├── sessionStore.ts  # interface (subscribe, ask, publish, ...)
-│       │   └── convexStore.ts   # Convex implementation
-│       ├── viewer/
-│       │   ├── ViewerAdapter.ts # load(sdf) highlight(indices) clear() reset()
-│       │   ├── Viewer3Dmol.tsx  # 3Dmol.js implementation
-│       │   └── gestures.ts      # optional MediaPipe module, behind a toggle
-│       ├── voice/useVoice.ts    # Web Speech API
-│       └── types/               # MolPayload, Highlight, Suggestion
+│       ├── views/               # Home, ProfessorStart, Professor (queue, copilot cards),
+│       │                        # VisualPanel (preview/publish), Student, Presentation
+│       ├── store/               # sessionStore interface + convexStore implementation
+│       ├── viewer/              # ViewerAdapter, ThreeDmolAdapter, MoleculeView
+│       ├── lesson.ts            # demo molecules and group labels
+│       └── ErrorBoundary.tsx
 │
 ├── services/chem/               # FastAPI (uv, Python 3.12)
 │   ├── pyproject.toml
@@ -77,13 +64,9 @@ spicy_doraemon/
 │       ├── groups.py            # functional-group SMARTS table (3 groups)
 │       └── tests/               # indices match SDF order for each demo molecule
 │
-├── observability/               # Droid agent (Node, separate process)
-│   ├── package.json             # @factory/droid-sdk
-│   └── src/watch.ts             # read traces → droid run() → write insights
+├── observability/               # NOT BUILT YET: Droid agent over a traces table
 │
-├── lesson/
-│   ├── molecules.json           # ethanol, acetic acid, aspirin
-│   └── excerpts.json            # approved source excerpts with IDs
+├── (no lesson/ dir)             # lesson data lives in convex/lib/lesson.ts
 │
 └── docs/
     ├── architecture.md          # diagram and data flow
@@ -94,15 +77,14 @@ spicy_doraemon/
 
 | Table | Visibility | Purpose |
 |---|---|---|
-| `sessions` | public (join code only) | code, topic, current molecule, `context` (last 5 questions), professor token hash |
-| `questions` | professor reads all; students see their own | text, session, status, group |
-| `feedback` | aggregate counts public | confused / understood per student |
-| `suggestions` | professor only | Claude output, source IDs, verification status, `cached` flag |
-| `previews` | professor only | molecule payload plus proposed highlight, not yet public |
+| `sessions` | public (join code only) | code, topic, professor token hash (current molecule and context memory NOT BUILT YET) |
+| `questions` | professor reads all; students see their own | text, session, status; capped at 20 per student per session |
+| `feedback` | aggregate counts public; a student reads only their own vote | confused / understood per student; professor can reset |
+| `suggestions` | professor only | Claude output, source IDs, optional molecule/group, `previewId` only if verified, `note`, `cached` flag |
+| `previews` | professor only | molecule SDF plus RDKit-verified highlight indices, not yet public |
 | `published_visuals` | public | the published payload and verified indices |
-| `cards` | draft: professor only; published: public | concept cards |
-| `traces` | professor/dev only | step, latency, status, error |
-| `trace_insights` | professor/dev only | Droid's findings |
+| `cards` | draft: professor only; published: public | NOT BUILT YET (concept cards) |
+| `traces`, `trace_insights` | professor/dev only | NOT BUILT YET (observability) |
 
 ## Data flow for the first milestone
 
@@ -141,3 +123,11 @@ Cut order if time runs short: understanding check, session memory, concept timel
 ## Secrets
 
 API keys live only in Convex env vars and `.env` files that are git-ignored: `ANTHROPIC_API_KEY`, `CHEM_SERVICE_URL`, `PROFESSOR_PASSCODE`, `FACTORY_API_KEY`. Nothing in browser code.
+
+## Status
+
+Built and verified: sessions and the three views, questions and feedback (with reset), the chemistry service, private previews and explicit publish, the 3Dmol viewer, the Claude copilot with validation and fallbacks, and the privacy split (every professor read or write requires the token).
+
+Not built: concept cards, session memory (current molecule), understanding check, QR code, voice input, gestures, the Droid observability agent, a stable chemistry-service host (the Cloudflare quick tunnel URL changes on every restart), and frontend hosting.
+
+Known limits: students are identified by a random browser id (a capability, not authentication); there is no per-IP rate limit; sessions never end.

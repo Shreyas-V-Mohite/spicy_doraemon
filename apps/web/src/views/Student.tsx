@@ -1,12 +1,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useStore } from "../store/sessionStore";
-import {
-  errorMessage,
-  getMyVote,
-  getStudentId,
-  saveMyVote,
-} from "../lib/identity";
+import { errorMessage, getStudentId } from "../lib/identity";
 import type { FeedbackValue } from "../types";
 import MoleculeView from "../viewer/MoleculeView";
 
@@ -18,7 +13,7 @@ export default function Student() {
   const mine = store.useMyQuestions(session?._id, studentId);
   const visual = store.useCurrentVisual(session?._id);
   const [text, setText] = useState("");
-  const [vote, setVote] = useState(getMyVote(code));
+  const vote = store.useMyVote(session?._id, studentId);
   const [error, setError] = useState<string | null>(null);
 
   if (session === undefined) return <main className="page">Loading…</main>;
@@ -45,8 +40,6 @@ export default function Student() {
 
   async function sendVote(value: FeedbackValue) {
     if (!session) return;
-    setVote(value);
-    saveMyVote(code, value);
     try {
       await store.setFeedback({ sessionId: session._id, studentId, value });
     } catch (err) {

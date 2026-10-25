@@ -23,6 +23,10 @@ export interface SessionStore {
     studentId: string,
   ): Question[] | undefined;
   useFeedbackCounts(sessionId: string | undefined): FeedbackCounts | undefined;
+  useMyVote(
+    sessionId: string | undefined,
+    studentId: string,
+  ): FeedbackValue | null | undefined;
   useProfessorSuggestions(
     sessionId: string | undefined,
     token: string | null,
@@ -62,6 +66,7 @@ export interface SessionStore {
     previewId: string;
   }): Promise<void>;
   unpublish(args: { sessionId: string; token: string }): Promise<void>;
+  resetFeedback(args: { sessionId: string; token: string }): Promise<void>;
   markAnswered(args: {
     sessionId: string;
     token: string;

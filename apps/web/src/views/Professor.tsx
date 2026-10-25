@@ -72,6 +72,14 @@ export default function Professor() {
           <span className="pill understood">
             Understood {counts?.understood ?? 0}
           </span>
+          <button
+            className="secondary"
+            onClick={() =>
+              store.resetFeedback({ sessionId: session._id, token })
+            }
+          >
+            Reset
+          </button>
         </div>
       </header>
 
