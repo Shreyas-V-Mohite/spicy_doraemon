@@ -89,11 +89,17 @@ export default defineSchema({
     .index("by_session", ["sessionId"])
     .index("by_session_and_student", ["sessionId", "studentId"]),
 
-  // Professor only: built from the chemistry service, not yet visible to students.
-  previews: defineTable(visualFields).index("by_session", ["sessionId"]),
-
-  // Public: at most one current visual per session.
+  // Public: at most one molecule shared with the class per session.
   published_visuals: defineTable(visualFields).index("by_session", ["sessionId"]),
+
+  // Public: at most one answer shared with the class per session. A snapshot,
+  // anonymous: the question text and what the student was shown, nothing else.
+  sharedAnswers: defineTable({
+    sessionId: v.id("sessions"),
+    question: v.string(),
+    answer: v.string(),
+    quotes: v.array(v.object({ label: v.string(), text: v.string() })),
+  }).index("by_session", ["sessionId"]),
 
   // A student's answer, created "pending" with the question and filled in by
   // an action. Students read text and quotes only; note/timings are for the

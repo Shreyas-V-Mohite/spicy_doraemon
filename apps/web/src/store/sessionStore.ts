@@ -7,7 +7,9 @@ import type {
   Lesson,
   MyQuestion,
   PublicSession,
-  Preview,
+  LoadedMolecule,
+  MoleculeStyle,
+  SharedAnswer,
   TranscriptLine,
   QueueCard,
   Visual,
@@ -37,10 +39,7 @@ export interface SessionStore {
   ): TranscriptLine[] | undefined;
   // Public: the visual the professor has published, or null.
   useCurrentVisual(sessionId: string | undefined): Visual | null | undefined;
-  useProfessorPreviews(
-    sessionId: string | undefined,
-    token: string | null,
-  ): Preview[] | undefined;
+  useSharedAnswer(sessionId: string | undefined): SharedAnswer | null | undefined;
 
   // null means the passcode was wrong.
   useCourses(passcode: string | null): Course[] | null | undefined;
@@ -99,18 +98,29 @@ export interface SessionStore {
     studentId: string;
     value: FeedbackValue;
   }): Promise<void>;
-  buildPreview(args: {
+  // Loads a molecule for the professor's own stage; nothing is shared.
+  loadMolecule(args: {
     sessionId: string;
     token: string;
-    query: string;
-    groupId: string;
-  }): Promise<string>;
-  publish(args: {
+    kind: "name" | "smiles";
+    value: string;
+  }): Promise<LoadedMolecule>;
+  // Shares with the class; the server re-verifies the highlight.
+  shareMolecule(args: {
     sessionId: string;
     token: string;
-    previewId: string;
+    kind: "name" | "smiles";
+    value: string;
+    groupId?: string;
+    style: MoleculeStyle;
   }): Promise<void>;
-  unpublish(args: { sessionId: string; token: string }): Promise<void>;
+  unshareMolecule(args: { sessionId: string; token: string }): Promise<void>;
+  shareAnswer(args: {
+    sessionId: string;
+    token: string;
+    questionId: string;
+  }): Promise<void>;
+  stopSharingAnswer(args: { sessionId: string; token: string }): Promise<void>;
   resetFeedback(args: { sessionId: string; token: string }): Promise<void>;
   addTranscriptLine(args: {
     sessionId: string;

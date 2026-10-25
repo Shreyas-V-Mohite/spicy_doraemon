@@ -1,17 +1,43 @@
+import type { ReactNode } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import type { FeedbackCounts, PublicSession, Visual } from "../types";
+import type {
+  FeedbackCounts,
+  MoleculeStyle,
+  PublicSession,
+  SharedAnswer,
+} from "../types";
 import MoleculeView from "../viewer/MoleculeView";
+import SharedAnswerCard from "./SharedAnswerCard";
+
+export interface ShownMolecule {
+  sdf: string;
+  indices: number[];
+  style: MoleculeStyle;
+  caption: string;
+}
 
 interface Props {
   session: PublicSession;
   counts: FeedbackCounts | undefined;
-  visual: Visual | null | undefined;
   present: boolean;
+  shown: ShownMolecule | null;
+  sharedAnswer: SharedAnswer | null | undefined;
+  // Professor-only pieces, left out in Present mode.
+  controls?: ReactNode;
+  onStopSharingAnswer?: () => void;
 }
 
-// What the class sees: how to join, the shared molecule, and the vote counts.
-// Nothing private lives here, so it is safe to screen-share.
-export default function Stage({ session, counts, visual, present }: Props) {
+// The class screen: how to join, the molecule on stage, a shared answer, and
+// the vote counts. Controls are passed in so Present mode can drop them.
+export default function Stage({
+  session,
+  counts,
+  present,
+  shown,
+  sharedAnswer,
+  controls,
+  onStopSharingAnswer,
+}: Props) {
   const joinUrl = `${window.location.origin}/s/${session.code}`;
   return (
     <div className="stage-card">
@@ -34,15 +60,26 @@ export default function Stage({ session, counts, visual, present }: Props) {
         </div>
       </div>
 
-      {visual ? (
+      {controls}
+
+      {shown ? (
         <>
-          <p className="caption">
-            {visual.label} in {visual.query}
-          </p>
-          <MoleculeView sdf={visual.sdf} highlight={visual.indices} />
+          <p className="caption">{shown.caption}</p>
+          <MoleculeView sdf={shown.sdf} highlight={shown.indices} style={shown.style} />
         </>
       ) : (
-        <p className="muted stage-empty">Nothing is being shared yet.</p>
+        <p className="muted stage-empty">No molecule on stage yet.</p>
+      )}
+
+      {sharedAnswer && (
+        <>
+          <SharedAnswerCard shared={sharedAnswer} />
+          {onStopSharingAnswer && (
+            <button className="secondary" onClick={onStopSharingAnswer}>
+              Stop sharing this answer
+            </button>
+          )}
+        </>
       )}
 
       <div className="counts">

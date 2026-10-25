@@ -4,6 +4,7 @@ import { useStore } from "../store/sessionStore";
 import { errorMessage, getStudentId } from "../lib/identity";
 import type { FeedbackValue, MyQuestion } from "../types";
 import MoleculeView from "../viewer/MoleculeView";
+import SharedAnswerCard from "./SharedAnswerCard";
 
 export default function Student() {
   const { code = "" } = useParams();
@@ -12,6 +13,7 @@ export default function Student() {
   const session = store.useSession(code);
   const mine = store.useMyQuestions(session?._id, studentId);
   const visual = store.useCurrentVisual(session?._id);
+  const sharedAnswer = store.useSharedAnswer(session?._id);
   const [text, setText] = useState("");
   const vote = store.useMyVote(session?._id, studentId);
   const [error, setError] = useState<string | null>(null);
@@ -61,11 +63,17 @@ export default function Student() {
       {visual && (
         <>
           <p className="muted">
-            {visual.label} in {visual.query}
+            {visual.groupId ? `${visual.label} in ${visual.query}` : visual.query}
           </p>
-          <MoleculeView sdf={visual.sdf} highlight={visual.indices} />
+          <MoleculeView
+            sdf={visual.sdf}
+            highlight={visual.indices}
+            style={visual.style}
+          />
         </>
       )}
+
+      {sharedAnswer && <SharedAnswerCard shared={sharedAnswer} />}
 
       <div className="row votes">
         <button

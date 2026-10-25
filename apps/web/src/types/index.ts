@@ -59,17 +59,39 @@ export interface FeedbackCounts {
 
 export type FeedbackValue = "confused" | "understood";
 
+export type MoleculeStyle = "stick" | "ball-and-stick" | "spacefill";
+
+// A molecule shared with the class (what students receive).
 export interface Visual {
   query: string;
   smiles: string;
   sdf: string;
-  groupId: string;
+  groupId: string | null;
+  // The functional group's name, or the molecule's when nothing is highlighted.
+  label: string;
+  indices: number[];
+  style: MoleculeStyle;
+}
+
+// A functional group RDKit found in a loaded molecule.
+export interface DetectedGroup {
+  id: string;
   label: string;
   indices: number[];
 }
 
-export interface Preview extends Visual {
-  _id: string;
+export interface LoadedMolecule {
+  query: string;
+  cid: number | undefined;
+  smiles: string;
+  sdf: string;
+  groups: DetectedGroup[];
+}
+
+export interface SharedAnswer {
+  question: string;
+  answer: string;
+  quotes: { label: string; text: string }[];
 }
 
 export interface Course {

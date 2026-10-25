@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from "react";
+import type { MoleculeStyle } from "../types";
 import { ThreeDmolAdapter } from "./ThreeDmolAdapter";
 
 interface Props {
   sdf: string;
   highlight: readonly number[] | null;
+  style?: MoleculeStyle;
 }
 
 // Rotate, zoom and pan come from 3Dmol's mouse and touch handling.
-export default function MoleculeView({ sdf, highlight }: Props) {
+export default function MoleculeView({ sdf, highlight, style = "ball-and-stick" }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const adapter = useRef<ThreeDmolAdapter | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -36,6 +38,7 @@ export default function MoleculeView({ sdf, highlight }: Props) {
 
   useEffect(() => {
     try {
+      adapter.current?.setStyle(style);
       adapter.current?.load(sdf);
       adapter.current?.setHighlight(highlight);
     } catch (err) {
@@ -49,6 +52,10 @@ export default function MoleculeView({ sdf, highlight }: Props) {
   useEffect(() => {
     adapter.current?.setHighlight(highlight);
   }, [highlight]);
+
+  useEffect(() => {
+    adapter.current?.setStyle(style);
+  }, [style]);
 
   return (
     <div className="viewer-wrap">

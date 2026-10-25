@@ -24,6 +24,7 @@ import type * as lib_visual from "../lib/visual.js";
 import type * as questions from "../questions.js";
 import type * as retrieval from "../retrieval.js";
 import type * as sessions from "../sessions.js";
+import type * as sharing from "../sharing.js";
 import type * as transcript from "../transcript.js";
 import type * as visuals from "../visuals.js";
 
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   questions: typeof questions;
   retrieval: typeof retrieval;
   sessions: typeof sessions;
+  sharing: typeof sharing;
   transcript: typeof transcript;
   visuals: typeof visuals;
 }>;

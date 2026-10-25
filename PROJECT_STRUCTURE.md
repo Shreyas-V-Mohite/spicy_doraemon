@@ -19,7 +19,8 @@ A live organic-chemistry classroom assistant. Students ask questions during a le
 | Limits | 20 questions per student per session, 20s cooldown, 300 questions per session |
 | Privacy | Professor-only data (queue, reasons, timings) needs the course token. Students read only status, answer text and quotes for their own questions |
 | Chemistry | FastAPI (`uv`, Python 3.12, PubChemPy, RDKit) is the only PubChem client and the only producer of atom indices |
-| Viewer | 3Dmol.js 2.5.5 behind our own `ViewerAdapter` (load SDF, highlight by atom index, reset). The teammate's gesture/camera viewer plugs in later |
+| Stage | The professor's stage is local: load any molecule by name or SMILES (SMILES builds a 3D structure with RDKit when PubChem has none), pick from the groups RDKit detected, choose a style. "Share molecule" sends only the input; the server re-fetches and re-verifies the highlight, so indices never come from the browser. "Share answer" is separate. Students receive the molecule, highlight and style, not live rotation |
+| Viewer | 3Dmol.js 2.5.5 behind our own `ViewerAdapter` (load SDF, highlight by atom index, style, reset). The teammate's gesture/camera viewer plugs in later |
 
 ## Repository layout
 
@@ -35,7 +36,8 @@ A live organic-chemistry classroom assistant. Students ask questions during a le
 │   ├── answers.ts           # the answer pipeline (internal action)
 │   ├── questions.ts         # submit (limits, schedules the answer), queues
 │   ├── feedback.ts          # confused/understood, counts, mine, reset
-│   ├── visuals.ts           # molecule previews and the published visual
+│   ├── visuals.ts           # load a molecule (professor stage), share it (server re-verifies), current
+│   ├── sharing.ts           # share one answer with the class
 │   ├── ai/answerPrompt.ts   # system prompt and JSON schema
 │   └── lib/
 │       ├── auth.ts          # requireCourseProfessor / requireProfessor
@@ -48,9 +50,9 @@ A live organic-chemistry classroom assistant. Students ask questions during a le
 ├── apps/web/                # React + TypeScript (Vite); vercel.json for SPA routing
 │   └── src/
 │       ├── views/           # Home, ProfessorStart, CoursePage, LessonForm, Professor,
-│       │                    # Stage, TranscriptPanel, VisualPanel, Student
+│       │                    # Stage, StageControls, SharedAnswerCard, TranscriptPanel, Student
 │       └── transcribe/      # Transcriber interface, Web Speech implementation, hook
-├── services/chem/           # FastAPI: /molecule, /highlight, /groups (RDKit SMARTS)
+├── services/chem/           # FastAPI: /molecule, /highlight (name or SMILES), /groups; 20 RDKit SMARTS groups
 └── samples/functional-groups.md   # sample lesson for trying the system
 ```
 
@@ -66,7 +68,8 @@ A live organic-chemistry classroom assistant. Students ask questions during a le
 | `transcriptLines`, `transcriptChunks` | professor only | what the professor said (editable lines); embedded chunks of about 60-120 words, searched per course |
 | `questionVectors`, `questionGroups` | professor/internal | question embeddings (vector index per session); groups of similar questions with a label |
 | `feedback` | counts public; student reads own vote | confused / understood; professor can reset |
-| `previews`, `published_visuals` | previews private; published public | molecule SDF plus RDKit-verified atom indices |
+| `published_visuals` | public | the molecule shared with the class: SDF, RDKit-verified atom indices, display style |
+| `sharedAnswers` | public | one anonymous question and answer shared with the class |
 
 ## Answer flow
 
@@ -85,13 +88,13 @@ Student sees the result live; professor sees flags first in the queue
 
 ## Status
 
-Built and tested: live lecture transcription (editable lines, chunk search across sessions, recent window, lesson-wins conflict handling), similar-question grouping (distinct-student counts, labels, split, group "mark answered", answer reuse, the students' classmates hint), courses and professor auth, lesson upload and editing with embeddings, retrieval, the answer pipeline with quote verification, limits, the merged professor page with Present mode and QR, student answers, the chemistry service, molecule preview and sharing, vote reset.
+Built and tested: the stage rework (any molecule by name or SMILES, 20 auto-detected groups, display styles, server-verified sharing, shareable answers), live lecture transcription (editable lines, chunk search across sessions, recent window, lesson-wins conflict handling), similar-question grouping (distinct-student counts, labels, split, group "mark answered", answer reuse, the students' classmates hint), courses and professor auth, lesson upload and editing with embeddings, retrieval, the answer pipeline with quote verification, limits, the merged professor page with Present mode and QR, student answers, the chemistry service, molecule preview and sharing, vote reset.
 
 Planned next (in order): the stage rework (any molecule by name or SMILES, about 20 auto-detected functional groups, separate "share molecule" and "share answer"); session memory in prompts; the teammate's gesture viewer; hosting.
 
 Dropped: the private copilot, concept cards, the understanding check, voice commands, and the Droid observability agent (Factory's service was unavailable). Answer timings are stored on each answer instead.
 
-Known limits: deleting or editing a transcript line fixes future answers but does not retract answers students already saw; the "transcribing" notice can stay on if the professor's browser crashes; quote checks prove the quoted text exists in the lesson, not that the summary reads it correctly; students are identified by a random browser id; no per-IP rate limit; sessions never end; the chemistry service needs a tunnel to a local machine until it is hosted.
+Known limits: deleting or editing a transcript line fixes future answers but does not retract answers students already saw; the "transcribing" notice can stay on if the professor's browser crashes; quote checks prove the quoted text exists in the lesson, not that the summary reads it correctly; students are identified by a random browser id; no per-IP rate limit; sessions never end; the chemistry service needs a tunnel to a local machine until it is hosted; heteroaromatic carbonyls (like caffeine's) and thioethers are not in the group library.
 
 ## Secrets
 

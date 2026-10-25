@@ -25,9 +25,11 @@ export function useConvexStore(): SessionStore {
   const flush = useAction(api.transcript.flushNow);
   const clear = useAction(api.transcript.clear);
   const resetVotes = useMutation(api.feedback.reset);
-  const build = useAction(api.visuals.buildPreview);
-  const publishPreview = useMutation(api.visuals.publish);
-  const unpublishCurrent = useMutation(api.visuals.unpublish);
+  const load = useAction(api.visuals.load);
+  const share = useAction(api.visuals.share);
+  const unshare = useMutation(api.visuals.unshare);
+  const shareQa = useMutation(api.sharing.shareAnswer);
+  const stopQa = useMutation(api.sharing.stopSharingAnswer);
 
   return {
     useSession: (code) => useQuery(api.sessions.getByCode, { code }),
@@ -89,10 +91,10 @@ export function useConvexStore(): SessionStore {
         api.visuals.current,
         sessionId ? { sessionId: sid(sessionId) } : "skip",
       ),
-    useProfessorPreviews: (sessionId, token) =>
+    useSharedAnswer: (sessionId) =>
       useQuery(
-        api.visuals.listPreviews,
-        sessionId && token ? { sessionId: sid(sessionId), token } : "skip",
+        api.sharing.currentAnswer,
+        sessionId ? { sessionId: sid(sessionId) } : "skip",
       ),
 
     createCourse: (args) => makeCourse(args),
@@ -126,17 +128,23 @@ export function useConvexStore(): SessionStore {
     setFeedback: async ({ sessionId, studentId, value }) => {
       await setVote({ sessionId: sid(sessionId), studentId, value });
     },
-    buildPreview: ({ sessionId, token, query, groupId }) =>
-      build({ sessionId: sid(sessionId), token, query, groupId }),
-    publish: async ({ sessionId, token, previewId }) => {
-      await publishPreview({
+    loadMolecule: ({ sessionId, token, kind, value }) =>
+      load({ sessionId: sid(sessionId), token, kind, value }),
+    shareMolecule: async ({ sessionId, token, kind, value, groupId, style }) => {
+      await share({ sessionId: sid(sessionId), token, kind, value, groupId, style });
+    },
+    unshareMolecule: async ({ sessionId, token }) => {
+      await unshare({ sessionId: sid(sessionId), token });
+    },
+    shareAnswer: async ({ sessionId, token, questionId }) => {
+      await shareQa({
         sessionId: sid(sessionId),
         token,
-        previewId: previewId as Id<"previews">,
+        questionId: questionId as Id<"questions">,
       });
     },
-    unpublish: async ({ sessionId, token }) => {
-      await unpublishCurrent({ sessionId: sid(sessionId), token });
+    stopSharingAnswer: async ({ sessionId, token }) => {
+      await stopQa({ sessionId: sid(sessionId), token });
     },
     resetFeedback: async ({ sessionId, token }) => {
       await resetVotes({ sessionId: sid(sessionId), token });

@@ -1,4 +1,5 @@
 import * as $3Dmol from "3dmol";
+import type { MoleculeStyle } from "../types";
 import type { ViewerAdapter } from "./ViewerAdapter";
 
 const HIGHLIGHT = "#ffb000";
@@ -17,6 +18,7 @@ export class ThreeDmolAdapter implements ViewerAdapter {
   private viewer: $3Dmol.GLViewer;
   private hasModel = false;
   private highlight: readonly number[] | null = null;
+  private style: MoleculeStyle = "ball-and-stick";
 
   // Throws if the browser can't give us a WebGL context; callers show a
   // message instead of letting the error unmount the page.
@@ -34,6 +36,13 @@ export class ThreeDmolAdapter implements ViewerAdapter {
     this.hasModel = true;
     this.applyStyle();
     this.reset();
+  }
+
+  setStyle(style: MoleculeStyle) {
+    this.style = style;
+    if (!this.hasModel) return;
+    this.applyStyle();
+    this.viewer.render();
   }
 
   setHighlight(indices: readonly number[] | null) {
@@ -64,18 +73,24 @@ export class ThreeDmolAdapter implements ViewerAdapter {
   }
 
   private applyStyle() {
-    this.viewer.setStyle(
-      {},
-      { stick: { radius: 0.14 }, sphere: { scale: 0.22 } },
-    );
+    const base = {
+      stick: { stick: { radius: 0.18 } },
+      "ball-and-stick": { stick: { radius: 0.14 }, sphere: { scale: 0.22 } },
+      spacefill: { sphere: { scale: 1 } },
+    }[this.style];
+    this.viewer.setStyle({}, base);
     if (this.highlight && this.highlight.length > 0) {
+      const mark =
+        this.style === "spacefill"
+          ? { sphere: { scale: 1, color: HIGHLIGHT } }
+          : {
+              stick: { radius: 0.22, color: HIGHLIGHT },
+              sphere: { scale: this.style === "stick" ? 0.32 : 0.4, color: HIGHLIGHT },
+            };
       this.viewer.setStyle(
         // 3Dmol matches any value in an array; its AtomSpec type says number.
         { serial: [...this.highlight] } as unknown as $3Dmol.AtomSelectionSpec,
-        {
-          stick: { radius: 0.2, color: HIGHLIGHT },
-          sphere: { scale: 0.4, color: HIGHLIGHT },
-        },
+        mark,
       );
     }
   }

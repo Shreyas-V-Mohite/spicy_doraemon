@@ -107,3 +107,8 @@ select { font: inherit; padding: 10px; border-radius: 8px; border: 1px solid var
 .transcript li { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
 .line-actions { flex-shrink: 0; gap: 4px; }
 .line-actions button { padding: 2px 8px; font-size: 0.75rem; }
+.chip-button { padding: 3px 10px; font-size: 0.8rem; border-radius: 999px; background: transparent; color: var(--accent); }
+.chip-button.active { background: var(--accent); color: #fff; }
+.shared-answer { padding: 12px; border-radius: 8px; border: 1px solid var(--accent); }
+.shared-answer p { margin: 0 0 6px; }
+.stage-controls { padding: 12px; border: 1px solid var(--border); border-radius: 12px; }

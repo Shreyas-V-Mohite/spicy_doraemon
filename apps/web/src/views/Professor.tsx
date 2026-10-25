@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useStore } from "../store/sessionStore";
-import { getCourseToken } from "../lib/identity";
-import type { Question, QueueCard } from "../types";
+import { errorMessage, getCourseToken } from "../lib/identity";
+import type { LoadedMolecule, MoleculeStyle, Question, QueueCard } from "../types";
 import { useTranscription } from "../transcribe/useTranscription";
-import Stage from "./Stage";
+import Stage, { type ShownMolecule } from "./Stage";
+import StageControls, { type MoleculeInput } from "./StageControls";
 import TranscriptPanel from "./TranscriptPanel";
-import VisualPanel from "./VisualPanel";
 
 const FLAGGED = new Set(["not_covered", "failed"]);
 
@@ -18,7 +18,14 @@ export default function Professor() {
   const queue = store.useProfessorQueue(session?._id, token);
   const counts = store.useFeedbackCounts(session?._id);
   const visual = store.useCurrentVisual(session?._id);
-  const [chosenPreview, setChosenPreview] = useState<string | null>(null);
+  const sharedAnswer = store.useSharedAnswer(session?._id);
+  // The professor's own stage: loaded locally, shared only on request.
+  const [stage, setStage] = useState<{ input: MoleculeInput; mol: LoadedMolecule } | null>(null);
+  const [input, setInput] = useState<MoleculeInput>({ kind: "name", value: "" });
+  const [groupId, setGroupId] = useState<string | null>(null);
+  const [style, setStyle] = useState<MoleculeStyle>("ball-and-stick");
+  const [busy, setBusy] = useState<"load" | "share" | null>(null);
+  const [stageError, setStageError] = useState<string | null>(null);
   const [present, setPresent] = useState(false);
   const lines = store.useTranscriptLines(session?._id, token);
   const sessionId = session?._id;
@@ -85,6 +92,78 @@ export default function Professor() {
     }
   }
 
+  async function loadMolecule(next: MoleculeInput) {
+    if (!session || !token) return;
+    setInput(next);
+    setBusy("load");
+    setStageError(null);
+    try {
+      const mol = await store.loadMolecule({
+        sessionId: session._id,
+        token,
+        kind: next.kind,
+        value: next.value,
+      });
+      setStage({ input: { kind: next.kind, value: next.value.trim() }, mol });
+      setGroupId(null);
+    } catch (err) {
+      setStageError(errorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function shareMolecule() {
+    if (!session || !token || !stage) return;
+    setBusy("share");
+    setStageError(null);
+    try {
+      await store.shareMolecule({
+        sessionId: session._id,
+        token,
+        kind: stage.input.kind,
+        value: stage.input.value,
+        groupId: groupId ?? undefined,
+        style,
+      });
+    } catch (err) {
+      setStageError(errorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const sharedCaption = visual
+    ? visual.groupId
+      ? `${visual.label} in ${visual.query}`
+      : visual.query
+    : null;
+  const group = stage?.mol.groups.find((g) => g.id === groupId);
+  const shown: ShownMolecule | null = stage
+    ? {
+        sdf: stage.mol.sdf,
+        indices: group?.indices ?? [],
+        style,
+        caption: group ? `${group.label} in ${stage.mol.query}` : stage.mol.query,
+      }
+    : visual
+      ? {
+          sdf: visual.sdf,
+          indices: visual.indices,
+          style: visual.style,
+          caption: sharedCaption ?? "",
+        }
+      : null;
+  const shareState = !stage
+    ? "nothing-loaded"
+    : !visual
+      ? "not-shared"
+      : visual.query === stage.mol.query &&
+          visual.groupId === groupId &&
+          visual.style === style
+        ? "shared"
+        : "different";
+
   return (
     <main className={present ? "page present-mode" : "page"}>
       <header className="bar">
@@ -120,7 +199,41 @@ export default function Professor() {
 
       <div className={present ? "present-grid" : "columns"}>
         <section>
-          <Stage session={session} counts={counts} visual={visual} present={present} />
+          <Stage
+            session={session}
+            counts={counts}
+            present={present}
+            shown={shown}
+            sharedAnswer={sharedAnswer}
+            onStopSharingAnswer={
+              present
+                ? undefined
+                : () => store.stopSharingAnswer({ sessionId: session._id, token })
+            }
+            controls={
+              present ? undefined : (
+                <StageControls
+                  input={input}
+                  onInput={setInput}
+                  onLoad={loadMolecule}
+                  loading={busy === "load"}
+                  groups={stage ? stage.mol.groups : null}
+                  groupId={groupId}
+                  onGroup={setGroupId}
+                  style={style}
+                  onStyle={setStyle}
+                  shareState={shareState}
+                  sharedCaption={sharedCaption}
+                  sharing={busy === "share"}
+                  onShare={shareMolecule}
+                  onUnshare={() =>
+                    store.unshareMolecule({ sessionId: session._id, token })
+                  }
+                  error={stageError}
+                />
+              )
+            }
+          />
         </section>
 
         {!present && (
@@ -136,6 +249,9 @@ export default function Professor() {
                   <QuestionCard
                     card={card}
                     onDone={() => markDone(card)}
+                    onShareAnswer={(questionId) =>
+                      store.shareAnswer({ sessionId: session._id, token, questionId })
+                    }
                     onSplit={(questionId) =>
                       store.splitFromGroup({
                         sessionId: session._id,
@@ -177,13 +293,6 @@ export default function Professor() {
               }
               onClear={() => store.clearTranscript({ sessionId: session._id, token })}
             />
-
-            <VisualPanel
-              sessionId={session._id}
-              token={token}
-              chosenId={chosenPreview}
-              onChoose={setChosenPreview}
-            />
           </section>
         )}
       </div>
@@ -195,10 +304,12 @@ function QuestionCard({
   card,
   onDone,
   onSplit,
+  onShareAnswer,
 }: {
   card: QueueCard;
   onDone: () => void;
   onSplit: (questionId: string) => void;
+  onShareAnswer: (questionId: string) => Promise<void>;
 }) {
   const grouped = card.members.length > 1;
   const openMembers = card.members.filter((m) => m.status === "open");
@@ -206,6 +317,10 @@ function QuestionCard({
   const rep =
     openMembers.find((m) => FLAGGED.has(m.answerStatus ?? "")) ??
     card.members[card.members.length - 1];
+  // Only an answer the student actually saw can be shared with the class.
+  const shareable = [rep, ...card.members].find(
+    (m) => m.answerStatus === "answered" || m.answerStatus === "fallback",
+  );
   return (
     <>
       <p>
@@ -235,6 +350,11 @@ function QuestionCard({
         </details>
       )}
       <div className="row">
+        {shareable && (
+          <button onClick={() => void onShareAnswer(shareable._id)}>
+            Share answer with class
+          </button>
+        )}
         <button className="secondary" onClick={onDone}>
           {grouped ? "Mark all answered" : "Mark answered"}
         </button>

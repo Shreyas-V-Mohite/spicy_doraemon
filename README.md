@@ -1,8 +1,8 @@
 # Spicy Doraemon
 
-A live organic-chemistry classroom assistant. Students ask questions and vote "confused" or "understood" while the professor lectures. The professor asks a Claude copilot for a private suggestion, previews a molecular highlight that RDKit has verified, and publishes it to every student's screen.
+A live organic-chemistry classroom assistant. Students ask questions and vote "confused" or "understood" while the professor lectures. Each student gets an answer automatically, taken only from the professor's own lessons and lecture transcript, with quotes that the server has checked word for word. The professor sees what the material couldn't answer, and can put a verified, highlighted 3D molecule or a good answer on every student's screen.
 
-The idea: an AI can help a professor teach in the moment, but it should never put an unchecked claim on the class screen. Claude proposes, code verifies, and the professor decides what students see.
+The idea: an AI can help a professor teach in the moment, but it should never put an unchecked claim in front of students. Claude proposes, code verifies, and the professor decides what the whole class sees.
 
 ## How it works
 
@@ -10,7 +10,7 @@ The idea: an AI can help a professor teach in the moment, but it should never pu
 2. The professor starts a session and gets a join code and a QR code. Students join at `/s/<CODE>`.
 3. A student asks a question. The system finds the matching passages in the course's lessons and lecture transcripts (including the last two minutes of the live lecture), and Claude writes a 2-3 sentence answer with quotes. The server checks that every quote appears word for word in the lesson. The student sees the answer and the quotes, labelled with where they came from.
 4. If the lesson doesn't cover the question, the student is told so and the professor sees it flagged at the top of the queue.
-5. The professor page also shows confused/understood votes and lets the professor share a verified, highlighted 3D molecule with the class. "Present mode" hides the private panel so the page can be screen-shared.
+5. The professor page also shows confused/understood votes. The professor can load any molecule by name or SMILES, highlight one of the functional groups RDKit finds in it, and share it, or share a good answer, with the whole class. "Present mode" hides the private panel so the page can be screen-shared.
 
 ## What is available today
 
@@ -23,12 +23,12 @@ The idea: an AI can help a professor teach in the moment, but it should never pu
 | Similar questions | Questions that mean the same thing are grouped into one card with a distinct-student count and a short label; a near-identical question reuses the verified answer; students see "N classmates asked something similar" |
 | Professor page | One page with a stage (join code, QR, shared molecule, votes) and a private queue of cards (not-covered first, then the most shared); Present mode |
 | Student page | Join by code, ask, vote, see answers with quotes |
-| Chemistry service | PubChem lookup, RDKit functional-group matching for hydroxyl, carboxylic acid and ester |
-| Molecule sharing | 3D view with highlighted atoms; preview, then publish to students |
+| Chemistry service | PubChem lookup by name, or a 3D structure built from SMILES; RDKit detects 20 functional groups (alcohol, phenol, ether, aldehyde, ketone, acid, ester, anhydride, acyl halide, amide, three kinds of amine, nitrile, nitro, thiol, alkyl halide, alkene, alkyne, aromatic ring) |
+| Molecule stage | The professor loads any molecule, sees the groups found in it as chips, picks one to highlight and a display style, and shares it; the server re-verifies the highlight before students see it |
+| Shared answers | The professor can put one student's question and the answer they were shown (anonymous) on every screen |
 
 ## Not built yet
 
-- Any molecule by name or SMILES, and about 20 auto-detected functional groups
 - Session memory for follow-up questions
 - Hand gestures and the camera stage (a teammate's viewer)
 - Stable hosting: the chemistry service needs a tunnel to your machine, and the frontend is not deployed
