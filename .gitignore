@@ -1,0 +1,24 @@
+!**/glob-import/dir/node_modules
+.DS_Store
+.idea
+*.cpuprofile
+*.local
+*.log
+/.vscode/
+/docs/.vitepress/cache
+dist
+dist-ssr
+explorations
+node_modules
+playground-temp
+temp
+TODOs.md
+.eslintcache
+
+# secrets and Python
+.env
+.env.*
+!.env.example
+.venv
+__pycache__
+*.pyc
