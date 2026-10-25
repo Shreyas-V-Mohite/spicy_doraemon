@@ -12,6 +12,16 @@ The idea: an AI can help a professor teach in the moment, but it should never pu
 4. If the lesson doesn't cover the question, the student is told so and the professor sees it flagged at the top of the queue.
 5. The professor page also shows confused/understood votes. The professor can load any molecule by name or SMILES, highlight one of the functional groups RDKit finds in it, and share it, or share a good answer, with the whole class. "Present mode" hides the private panel so the page can be screen-shared.
 
+## Architecture
+
+![System architecture](docs/Architecture.png)
+
+### Answer flow
+
+![Answer flow](docs/answer_flow.png)
+
+Claude proposes, code verifies, the professor decides what the class sees. The chemistry service is the only source of atom indices, so Claude never produces a highlight. The pitch and framing are in `docs/pitch.md`.
+
 ## What is available today
 
 | Area | Status |
