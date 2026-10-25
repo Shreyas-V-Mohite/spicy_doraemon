@@ -1,8 +1,39 @@
 # Spicy Doraemon
 
-A live organic-chemistry classroom assistant. Students ask questions and vote "confused" or "understood". The professor asks a Claude copilot for a private suggestion, previews an RDKit-verified molecular highlight, and publishes it to every student's screen.
+A live organic-chemistry classroom assistant. Students ask questions and vote "confused" or "understood" while the professor lectures. The professor asks a Claude copilot for a private suggestion, previews a molecular highlight that RDKit has verified, and publishes it to every student's screen.
 
-See `PROJECT_STRUCTURE.md` for the design decisions, tables and status.
+The idea: an AI can help a professor teach in the moment, but it should never put an unchecked claim on the class screen. Claude proposes, code verifies, and the professor decides what students see.
+
+## How it works
+
+1. The professor starts a session and gets a 5-character join code.
+2. Students join at `/s/<CODE>`, send questions, and vote confused or understood. The professor sees a live question queue and vote counts.
+3. The professor clicks "Ask copilot" on a question. Claude answers from a fixed set of approved lesson excerpts and names a molecule and a functional group to show. The answer is private to the professor.
+4. The chemistry service looks the molecule up on PubChem and uses RDKit to find the exact atoms of that functional group. If the group isn't in the molecule, no highlight is offered.
+5. The professor previews the 3D molecule with the highlighted atoms, then clicks Publish. Students and the presentation view (`/present/<CODE>`) update live.
+
+## What is available today
+
+| Area | Status |
+|---|---|
+| Sessions | Professor passcode login, join codes, professor and student pages, presentation view |
+| Student questions | Submit (up to 20 per student), live professor queue, mark answered |
+| Understanding feedback | Confused / Understood votes, live counts, professor reset |
+| Claude copilot | Private explanation, cited source excerpts and a teaching action; validated against the lesson; falls back to a labelled "cached" answer if Claude is slow or down |
+| Chemistry service | PubChem lookup (demo molecules cached offline), RDKit functional-group matching for hydroxyl, carboxylic acid and ester |
+| Molecule viewer | 3D view (rotate, zoom, reset) with highlighted atoms, driven only by the verified payload |
+| Professor-controlled sharing | Private preview, explicit publish and unpublish; students never see previews or suggestions |
+| Demo lesson | Ethanol, acetic acid and aspirin with five approved excerpts |
+
+## Not built yet
+
+- Concept cards from lecture transcript text, session memory (current molecule), and the understanding check
+- QR code on the presentation view, voice input, and hand gestures
+- Droid observability agent
+- Stable hosting: the chemistry service currently needs a tunnel to your machine, and the frontend is not deployed
+- Integration with the teammate's viewer and SpacetimeDB (waiting on their context)
+
+Design decisions and the Convex tables are in `PROJECT_STRUCTURE.md`.
 
 ## Run it locally
 
