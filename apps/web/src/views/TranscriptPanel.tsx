@@ -66,7 +66,9 @@ export default function TranscriptPanel({
           </span>
         </div>
       )}
-      {status === "error" && detail && <p className="error">{detail}</p>}
+      {detail && (
+        <p className={status === "listening" ? "muted" : "error"}>{detail}</p>
+      )}
       {error && <p className="error">{error}</p>}
       {interim && <p className="muted">{interim}…</p>}
 
