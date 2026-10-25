@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RenderStyle } from '../viewer/MoleculeViewerAdapter';
 import { resolveMolecule, type MoleculeSource } from '../molecules/registry';
-import '../molecules/pubchem'; // registers the pubchem: resolver (teacher and students)
-import { useMoleculeVoice } from '../voice/useMoleculeVoice';
+import { findMoleculeByName, MoleculeLookupError } from '../molecules/pubchem'; // also registers the pubchem: resolver
 import { ManualGestureController } from '../gestures/ManualGestureController';
 import type { CommandSource, GestureCommand, GestureController } from '../gestures/types';
 import { useHandController, useTrackingValue } from './useHandController';
 import { WebcamBackdrop } from './WebcamBackdrop';
 import { ManualControls } from './ManualControls';
 import { Dock } from './Dock';
-import { VoiceDebugPanel } from './VoiceDebugPanel';
-import { MoleculeScene, type MoleculeSceneHandle } from '../scene/MoleculeScene';
+import { MoleculeScene, type MoleculeSceneHandle, type PlannedSpot } from '../scene/MoleculeScene';
 import { useLocalScene } from '../scene/useLocalScene';
 import { MAX_SCENE_MOLECULES } from '../scene/types';
 import type { ClassroomSync } from '../sync/useClassroomSync';
@@ -26,6 +24,17 @@ export interface ClassroomViewProps {
   /** Extra controllers to drive the selected molecule (e.g. a teammate's input). */
   extraControllers?: GestureController[];
 }
+
+/**
+ * Molecules on stage as soon as a class (or solo session) opens, side by side:
+ * the lesson's ethanol, acetic acid and aspirin. All three load without the
+ * network (bundled files / the molecule pack).
+ */
+const STARTUP_MOLECULES: PlannedSpot[] = [
+  { moleculeId: 'builtin:ethanol', x: -0.3, y: 0, scale: 0.45 },
+  { moleculeId: 'pubchem:176', x: 0, y: 0, scale: 0.45 }, // acetic acid
+  { moleculeId: 'builtin:aspirin', x: 0.3, y: 0, scale: 0.45 },
+];
 
 const TEACHER_ACTIVITY: Record<string, string> = {
   ROTATE: 'rotating a molecule',
@@ -45,7 +54,6 @@ export function ClassroomView({ role, roomId, name, sync, extraControllers }: Cl
   const [toast, setToast] = useState<string | null>(null);
   const [showLandmarks, setShowLandmarks] = useState(true);
   const [showPad, setShowPad] = useState(false);
-  const [showVoiceDebug, setShowVoiceDebug] = useState(() => new URLSearchParams(location.search).get('debug') === 'voice');
 
   const room = sync?.room ?? null;
   const lockFollow = !!room?.lockFollow;
@@ -97,7 +105,7 @@ export function ClassroomView({ role, roomId, name, sync, extraControllers }: Cl
     window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 2600);
   };
 
-  // ---- molecules are only ever added (voice / picker), removed via the trash --
+  // ---- molecules are only ever added (start-up, ⚙ menu), removed via the trash --
   const addMolecule = (id: string) => {
     if (!canEdit) return;
     if (scene.items.length >= MAX_SCENE_MOLECULES) {
@@ -107,8 +115,27 @@ export function ClassroomView({ role, roomId, name, sync, extraControllers }: Cl
     scene.add(id);
   };
 
-  // Voice (always listening for the teacher): "show me caffeine" → PubChem → added for everyone.
-  const voice = useMoleculeVoice((hit) => addMolecule(hit.id), { enabled: !isStudent, alwaysListen: true });
+  /** ⚙ → Type a name: look it up (bundled pack first, then PubChem) and add it. */
+  const addByName = async (name: string) => {
+    try {
+      const hit = await findMoleculeByName(name);
+      addMolecule(hit.id);
+    } catch (err) {
+      showToast(err instanceof MoleculeLookupError ? err.message : 'Could not reach PubChem (check the internet connection).');
+    }
+  };
+
+  // Start-up: put the lesson's molecules on stage, once, when the stage is
+  // empty. In a synced room wait until the room's molecules have loaded, so a
+  // teacher who reloads mid-lesson keeps what is there.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || !canEdit || (sync && !sync.ready)) return;
+    seeded.current = true;
+    if (scene.items.length) return;
+    sceneRef.current?.planLayout(STARTUP_MOLECULES);
+    for (const m of STARTUP_MOLECULES) scene.add(m.moleculeId);
+  }, [canEdit, sync, scene]);
 
   const activeItem = scene.items.find((i) => i.key === activeKey) ?? null;
   const activeMolecule = useResolved(activeItem?.moleculeId);
@@ -123,10 +150,9 @@ export function ClassroomView({ role, roomId, name, sync, extraControllers }: Cl
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     (window as unknown as { __mgl: unknown }).__mgl = {
-      say: (text: string) => voice.submit(text),
-      sayLive: (text: string) => voice.interimHeard(text),
-      voiceStatus: voice.status.text,
-      voiceDebug: () => voice.debug,
+      add: (moleculeId: string) => addMolecule(moleculeId),
+      command: (cmd: GestureCommand, source?: CommandSource) => sceneRef.current?.applyCommand(cmd, source),
+      addByName: (name: string) => addByName(name),
       scene: () => sceneRef.current?.debug() ?? [],
       items: () => scene.items.map((i) => ({ key: i.key, moleculeId: i.moleculeId, seq: i.seq, gesture: i.gesture })),
       activeKey: () => sceneRef.current?.activeKey() ?? null,
@@ -186,9 +212,9 @@ export function ClassroomView({ role, roomId, name, sync, extraControllers }: Cl
               <strong>Waiting for your teacher to add a molecule…</strong>
             ) : (
               <>
-                <span className="snap-hint__icon">🎤</span>
-                <strong>Say a molecule</strong>
-                <span>e.g. “show me caffeine” — each one you call is added to the stage</span>
+                <span className="snap-hint__icon">⚙</span>
+                <strong>No molecules on stage</strong>
+                <span>Add one from ⚙ → Add a molecule (or type a name)</span>
               </>
             )}
           </div>
@@ -236,7 +262,7 @@ export function ClassroomView({ role, roomId, name, sync, extraControllers }: Cl
         {!isStudent && (
           <Dock
             hand={hand}
-            voice={voice}
+            addByName={addByName}
             canEdit={canEdit}
             addMolecule={addMolecule}
             style={style}
@@ -245,16 +271,12 @@ export function ClassroomView({ role, roomId, name, sync, extraControllers }: Cl
             setShowLandmarks={setShowLandmarks}
             showPad={showPad}
             setShowPad={setShowPad}
-            showVoiceDebug={showVoiceDebug}
-            setShowVoiceDebug={setShowVoiceDebug}
             lockFollow={sync ? { value: lockFollow, set: sync.setLockFollow } : undefined}
           />
         )}
         {sync && !isStudent && !sync.isRoomTeacher && sync.status === 'connected' && room && (
           <p className="toast">Another teacher controls this room.</p>
         )}
-
-        {!isStudent && showVoiceDebug && <VoiceDebugPanel voice={voice} onClose={() => setShowVoiceDebug(false)} />}
 
         {toast && <div className="toast">{toast}</div>}
       </main>

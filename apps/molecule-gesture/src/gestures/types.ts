@@ -38,6 +38,12 @@ export type GestureCommand =
  */
 export interface CommandSource {
   hand: number;
+  /**
+   * The centre of that hand's palm, in camera-frame coordinates (0–1, as
+   * displayed, i.e. mirrored), when the hand is in view. Rotate/resize go to
+   * the molecule nearest to it.
+   */
+  palm?: { x: number; y: number; frameAspect: number };
 }
 
 export type GestureCommandListener = (command: GestureCommand, source?: CommandSource) => void;

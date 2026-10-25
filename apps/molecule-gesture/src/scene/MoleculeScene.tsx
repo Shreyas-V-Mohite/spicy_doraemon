@@ -28,6 +28,12 @@ export interface MoleculeSceneHandle {
    */
   applyCommand(cmd: GestureCommand, source?: CommandSource): void;
   activeKey(): string | null;
+  /**
+   * Where the next molecules with these IDs should appear (viewer-widths from
+   * the centre, and size relative to fitting the screen), whatever order they
+   * finish loading in.
+   */
+  planLayout(spots: PlannedSpot[]): void;
   /** Debug/test snapshot. */
   debug(): {
     key: string;
@@ -38,6 +44,13 @@ export interface MoleculeSceneHandle {
     loaded: string | null;
     fit: ReturnType<MoleculeViewerAdapter['fitInfo']> | null;
   }[];
+}
+
+export interface PlannedSpot {
+  moleculeId: string;
+  x: number;
+  y: number;
+  scale: number;
 }
 
 interface Slot {
@@ -94,9 +107,35 @@ export const MoleculeScene = forwardRef<MoleculeSceneHandle, MoleculeSceneProps>
   const [overTrash, setOverTrash] = useState(false);
   /** The molecule each hand last picked up: its rotate/resize go there. */
   const handTarget = useRef(new Map<number, string>());
+  /** The molecule each hand is rotating/resizing right now (until its next STOP). */
+  const handLock = useRef(new Map<number, string>());
+
+  /**
+   * The molecule nearest to a palm (camera-frame point, mirrored), measured
+   * on screen. Skips molecules on their way to the trash and those `taken`
+   * by the other hand.
+   */
+  const nearestTo = (palm: NonNullable<CommandSource['palm']>, w: number, h: number, taken: Set<string>): string | null => {
+    const p = coverPointToPlacement(palm.x, palm.y, palm.frameAspect, w, h);
+    let best: string | null = null;
+    let bestD = Infinity;
+    for (const it of itemsRef.current) {
+      if (leavingRef.current.has(it.key) || taken.has(it.key)) continue;
+      const a = slots.current.get(it.key)?.adapter;
+      if (!a) continue;
+      const c = a.placement();
+      const d = Math.hypot(p.x - c.x, p.y - c.y);
+      if (d < bestD) {
+        bestD = d;
+        best = it.key;
+      }
+    }
+    return best;
+  };
   const owner = useRef(new Map<string, { src: number; at: number }>());
   const activity = useRef(new Map<string, { label: string; at: number }>());
   const leavingRef = useRef(new Set<string>());
+  const plan = useRef<PlannedSpot[]>([]);
   const [leaving, setLeaving] = useState<Set<string>>(new Set());
 
   const setActive = useCallback(
@@ -145,6 +184,7 @@ export const MoleculeScene = forwardRef<MoleculeSceneHandle, MoleculeSceneProps>
     }
     for (const k of [...owner.current.keys()]) if (!keys.includes(k)) owner.current.delete(k);
     for (const k of [...activity.current.keys()]) if (!keys.includes(k)) activity.current.delete(k);
+    for (const [src, k] of [...handLock.current]) if (!keys.includes(k)) handLock.current.delete(src);
     if (added.length) setActive(added[added.length - 1]);
     else if (activeRef.current && !keys.includes(activeRef.current)) setActive(keys[keys.length - 1] ?? null);
   }, [items, setActive]);
@@ -172,6 +212,7 @@ export const MoleculeScene = forwardRef<MoleculeSceneHandle, MoleculeSceneProps>
       owner.current.delete(key);
       activity.current.delete(key);
       for (const [src, k] of handTarget.current) if (k === key) handTarget.current.delete(src);
+      for (const [src, k] of handLock.current) if (k === key) handLock.current.delete(src);
       window.setTimeout(() => {
         onRemove(key);
         leavingRef.current.delete(key);
@@ -262,11 +303,28 @@ export const MoleculeScene = forwardRef<MoleculeSceneHandle, MoleculeSceneProps>
           owner.current.delete(key);
         }
         for (const key of touched) adapterOf(key)?.applyCommand(cmd);
+        // The gesture is over: the next one picks the molecule nearest the palm again.
+        handLock.current.delete(src);
         return;
       }
 
-      const target = handTarget.current.get(src);
-      const key = target && itemsRef.current.some((i) => i.key === target) ? target : activeRef.current;
+      const exists = (k: string | undefined): k is string => !!k && !leavingRef.current.has(k) && itemsRef.current.some((i) => i.key === k);
+      let key: string | null | undefined;
+      if (!source) {
+        key = activeRef.current; // keys and buttons: the selected molecule
+      } else {
+        // Each hand works on the molecule nearest its own palm, picked when a
+        // rotate/resize starts and kept until it ends (so it never jumps to
+        // another molecule mid-gesture).
+        key = handLock.current.get(src);
+        if (!exists(key)) {
+          const taken = new Set([...handLock.current].filter(([s]) => s !== src).map(([, k]) => k));
+          key = source.palm ? nearestTo(source.palm, w, h, taken) : exists(handTarget.current.get(src)) ? handTarget.current.get(src) : activeRef.current;
+          if (!key) return;
+          handLock.current.set(src, key);
+          if (key !== activeRef.current) setActive(key);
+        }
+      }
       if (!key) return;
       const o = owner.current.get(key);
       if (o && o.src !== src && now - o.at < OWNER_MS) return; // the other hand is working on it
@@ -284,6 +342,9 @@ export const MoleculeScene = forwardRef<MoleculeSceneHandle, MoleculeSceneProps>
     () => ({
       applyCommand,
       activeKey: () => activeRef.current,
+      planLayout: (spots) => {
+        plan.current.push(...spots);
+      },
       debug: () =>
         itemsRef.current.map((it) => {
           const s = slots.current.get(it.key);
@@ -315,9 +376,16 @@ export const MoleculeScene = forwardRef<MoleculeSceneHandle, MoleculeSceneProps>
         a.setView(it.view); // teacher reloaded mid-lesson
         return;
       }
-      // Pick the free spot farthest from the other molecules.
+      // A spot planned in advance (the molecules shown at start-up).
+      const planned = plan.current.findIndex((p) => p.moleculeId === m.id);
+      if (planned >= 0) {
+        const [p] = plan.current.splice(planned, 1);
+        a.layOut(p.scale, p.x, p.y);
+        return;
+      }
+      // Pick the free spot farthest from the other (already placed) molecules.
       const others = itemsRef.current
-        .filter((i) => i.key !== key)
+        .filter((i) => i.key !== key && slots.current.get(i.key)?.laidOut)
         .map((i) => slots.current.get(i.key)?.adapter?.placement())
         .filter((p): p is { x: number; y: number } => !!p);
       if (others.length === 0) {

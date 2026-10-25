@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { HandGestureController, TrackingSnapshot } from '../gestures/HandGestureController';
 import type { MotionMode } from '../gestures/GestureMotionMapper';
-import type { MoleculeVoice, VoiceEngine, VoiceLang } from '../voice/useMoleculeVoice';
 import type { RenderStyle } from '../viewer/MoleculeViewerAdapter';
 import { BUILTIN_MOLECULES } from '../molecules/registry';
 
@@ -23,28 +22,27 @@ const POSTURE_LABEL: Record<string, string> = {
 
 export interface DockProps {
   hand: HandGestureController | null;
-  voice: MoleculeVoice;
   canEdit: boolean;
   addMolecule(id: string): void;
+  /** Look a molecule up by name (bundled pack, then PubChem) and add it. */
+  addByName(name: string): Promise<void>;
   style: RenderStyle;
   setStyle(s: RenderStyle): void;
   showLandmarks: boolean;
   setShowLandmarks(v: boolean): void;
   showPad: boolean;
   setShowPad(v: boolean): void;
-  showVoiceDebug: boolean;
-  setShowVoiceDebug(v: boolean): void;
   /** Only in a synced classroom. */
   lockFollow?: { value: boolean; set(v: boolean): void };
 }
 
 /**
  * Everything the teacher needs in one slim bar at the bottom centre, so the
- * camera image and the molecules stay uncovered: mic + what it heard, hand
- * mode, and two small menus (settings, help) that open only on demand.
+ * camera image and the molecules stay uncovered: the camera / hand mode, and
+ * two small menus (settings, help) that open only on demand.
  */
 export function Dock(props: DockProps) {
-  const { hand, voice } = props;
+  const { hand } = props;
   const [menu, setMenu] = useState<'settings' | 'help' | null>(null);
   const snapRef = useRef<TrackingSnapshot | null>(null);
   const [snap, setSnap] = useState<TrackingSnapshot | null>(null);
@@ -81,16 +79,6 @@ export function Dock(props: DockProps) {
     });
   }, [hand]);
 
-  // Voice feedback fades after a few seconds so the bar stays quiet.
-  const [caption, setCaption] = useState<{ text: string; kind: string } | null>(null);
-  useEffect(() => {
-    if (!voice.status.text) return;
-    setCaption({ text: voice.status.text, kind: voice.status.kind });
-    if (voice.status.kind === 'busy') return;
-    const t = window.setTimeout(() => setCaption(null), 5000);
-    return () => window.clearTimeout(t);
-  }, [voice.status]);
-
   const phase = snap?.phase ?? 'idle';
   const running = phase === 'running';
   const busy = phase === 'loading-models' || phase === 'requesting-camera';
@@ -119,7 +107,7 @@ export function Dock(props: DockProps) {
               </select>
             </label>
           )}
-          {props.canEdit && <TypeMolecule voice={voice} />}
+          {props.canEdit && <TypeMolecule addByName={props.addByName} />}
           <label className="field">
             <span>Style</span>
             <select value={props.style} onChange={(e) => props.setStyle(e.target.value as RenderStyle)}>
@@ -128,26 +116,11 @@ export function Dock(props: DockProps) {
               <option value="spacefill">Space-filling</option>
             </select>
           </label>
-          <label className="field">
-            <span>Speech language</span>
-            <select value={voice.lang} onChange={(e) => voice.setLang(e.target.value as VoiceLang)}>
-              <option value="en-US">English</option>
-              <option value="ko-KR">한국어</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>Speech engine</span>
-            <select value={voice.engine} onChange={(e) => voice.setEngine(e.target.value as VoiceEngine)}>
-              <option value="deepgram">Deepgram Nova-3 (server)</option>
-              <option value="browser">Browser (Web Speech API)</option>
-            </select>
-          </label>
           {props.lockFollow && (
             <Toggle label="Lock students to my view" checked={props.lockFollow.value} onChange={props.lockFollow.set} disabled={!props.canEdit} />
           )}
           <Toggle label="Hand skeleton" checked={props.showLandmarks} onChange={props.setShowLandmarks} />
           <Toggle label="Arrow buttons" checked={props.showPad} onChange={props.setShowPad} />
-          <Toggle label="Voice debug panel" checked={props.showVoiceDebug} onChange={props.setShowVoiceDebug} />
           {running && <Toggle label="Hand control" checked={!paused} onChange={(v) => hand?.setCommandsEnabled(v)} />}
           {running && (
             <button className="btn btn--ghost btn--sm" onClick={() => hand?.stop()}>
@@ -159,32 +132,17 @@ export function Dock(props: DockProps) {
       )}
       {menu === 'help' && (
         <div className="dock-menu dock-menu--help" role="dialog" aria-label="How to control">
-          <p><b>🎤 Add</b> say “show me caffeine” — each one is added</p>
+          <p><b>⚙ Add</b> Settings → Add a molecule, or type any name</p>
           <p><b>☝️ Move</b> point your index finger at a molecule and carry it</p>
           <p><b>🗑️ Delete</b> carry it onto the trash (bottom left) — it disappears right away</p>
-          <p><b>✋ Resize</b> open / close your fingers — open all the way and repeat (open, close, open…) to keep growing; close all the way and repeat to keep shrinking</p>
-          <p><b>🔄 Rotate</b> hold your fingers still ½ s, then turn your hand</p>
-          <p><b>🙌 Two hands</b> each hand works on its own molecule (e.g. turn one, carry another)</p>
+          <p><b>✋ Resize</b> open / close your fingers — open all the way and repeat (open, close, open…) to keep growing. Stop for ½ s and the size locks</p>
+          <p><b>🔄 Rotate</b> hold your fingers still ½ s (after resizing, at any bend), then turn your hand. To resize again: squeeze fully, open ↔ fist</p>
+          <p><b>🙌 Two hands</b> each hand works on the molecule nearest its palm (e.g. left hand on the left molecule)</p>
           <p className="dock-menu__meta">Keys: arrows/Q/E rotate · +/− zoom · R reset · Space pause hand</p>
         </div>
       )}
 
       <div className="dock" role="toolbar" aria-label="Controls">
-        <button
-          className={`dock__mic ${voice.listening ? 'is-on' : ''}`}
-          onClick={voice.toggle}
-          disabled={!voice.supported}
-          title={voice.supported ? (voice.listening ? 'Listening — click to mute' : 'Mic off — click to listen') : 'Speech needs Chrome or Edge'}
-          aria-pressed={voice.listening}
-        >
-          {voice.listening ? '🎤' : '🔇'}
-        </button>
-        <span className={`dock__caption ${caption ? `is-${caption.kind}` : ''}`} title={voice.heard}>
-          {voice.interim ? `“${voice.interim}”` : caption ? caption.text : voice.listening ? 'Say “show me …”' : 'Mic off'}
-        </span>
-
-        <span className="dock__sep" />
-
         {!running ? (
           <button className="dock__cam" onClick={startCamera} disabled={busy} title={snap?.error}>
             {busy
@@ -252,7 +210,7 @@ function Toggle({ label, checked, onChange, disabled }: { label: string; checked
   );
 }
 
-function TypeMolecule({ voice }: { voice: MoleculeVoice }) {
+function TypeMolecule({ addByName }: { addByName(name: string): Promise<void> }) {
   const [typed, setTyped] = useState('');
   return (
     <form
@@ -261,7 +219,7 @@ function TypeMolecule({ voice }: { voice: MoleculeVoice }) {
         e.preventDefault();
         const text = typed.trim();
         if (!text) return;
-        void voice.submit(`show ${text}`);
+        void addByName(text);
         setTyped('');
       }}
     >

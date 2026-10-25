@@ -2,7 +2,33 @@ import { GestureMotionMapper, type MapperConfig, type MapperStatus } from './Ges
 import { GestureRecognizer, type RecognizerConfig, type RecognizerOutput } from './GestureRecognizer';
 import { KeypointSmoother } from './KeypointSmoother';
 import { HAND_SLOTS, HandSelector } from './HandSelector';
-import { CommandEmitter, type GestureController, type GestureCommand, type GestureCommandListener, type HandFrame, type HandObservation } from './types';
+import {
+  CommandEmitter,
+  HandKp,
+  type CommandSource,
+  type GestureController,
+  type GestureCommand,
+  type GestureCommandListener,
+  type HandFrame,
+  type HandObservation,
+} from './types';
+
+const PALM_POINTS = [HandKp.WRIST, HandKp.INDEX_MCP, HandKp.MIDDLE_MCP, HandKp.RING_MCP, HandKp.PINKY_MCP];
+
+/** Centre of the palm in camera-frame coordinates (0–1), mirrored like the preview. */
+function palmOf(frame: HandFrame, mirror: boolean): CommandSource['palm'] {
+  const kp = frame.hand?.keypoints;
+  if (!kp) return undefined;
+  let x = 0;
+  let y = 0;
+  for (const i of PALM_POINTS) {
+    x += kp[i].x;
+    y += kp[i].y;
+  }
+  x /= PALM_POINTS.length * frame.frameWidth;
+  y /= PALM_POINTS.length * frame.frameHeight;
+  return { x: mirror ? 1 - x : x, y, frameAspect: frame.frameWidth / frame.frameHeight };
+}
 import type { HandLandmarker, LandmarkerInfo, LoadProgress } from '../hand/types';
 import { WebcamSource } from '../hand/WebcamSource';
 
@@ -217,7 +243,7 @@ export class HandGestureController implements GestureController {
       }
       const f = tr.smoother.apply({ ...raw, hand: pick?.hand ?? null, hands: undefined });
       const rec = tr.recognizer.update(f);
-      if (this.snapshot.commandsEnabled) this.emitAll(tr.mapper.update(f, rec), slot);
+      if (this.snapshot.commandsEnabled) this.emitAll(tr.mapper.update(f, rec), slot, palmOf(f, tr.mapper.config.mirror));
       if (f.hand) hands.push({ slot, hand: f.hand, recognizer: rec, mapper: tr.mapper.status(rec.posture) });
     }
     // Primary (the biggest hand) first.
@@ -226,8 +252,8 @@ export class HandGestureController implements GestureController {
     return { frame: { ...raw, hand: hands[0]?.hand ?? null, hands: hands.map((h) => h.hand), ignored }, hands };
   }
 
-  private emitAll(cmds: GestureCommand[], slot: number) {
-    for (const cmd of cmds) this.commands.emit(cmd, { hand: slot });
+  private emitAll(cmds: GestureCommand[], slot: number, palm?: CommandSource['palm']) {
+    for (const cmd of cmds) this.commands.emit(cmd, palm ? { hand: slot, palm } : { hand: slot });
   }
 
   private releaseAll() {

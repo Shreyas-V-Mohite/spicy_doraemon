@@ -488,18 +488,3 @@ kbd {
   .dock-wrap { max-width: calc(100% - 100px); }
   .dock__caption { min-width: 60px; max-width: 140px; }
 }
-
-/* Voice debug panel (⚙ → Voice debug panel, or ?debug=voice): top right, small. */
-.voice-debug {
-  position: absolute; top: 12px; right: 12px; z-index: 30; width: min(340px, calc(100% - 32px));
-  background: rgba(10, 12, 24, 0.86); border: 1px solid var(--border); border-radius: 12px;
-  padding: 10px 12px; font-size: 12px; color: var(--text); backdrop-filter: blur(8px);
-}
-.voice-debug header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.voice-debug__engine { font-family: var(--mono); font-size: 11px; color: var(--muted); }
-.voice-debug__engine[data-engine='deepgram'] { color: #86efac; }
-.voice-debug__close { margin-left: auto; background: none; border: 0; color: var(--muted); font-size: 16px; cursor: pointer; line-height: 1; }
-.voice-debug__note { margin: 0 0 6px; color: #fbbf24; }
-.voice-debug dl { margin: 0; display: grid; gap: 2px; }
-.voice-debug dt { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 4px; }
-.voice-debug dd { margin: 0; font-family: var(--mono); word-break: break-word; }

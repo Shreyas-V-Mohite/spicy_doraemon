@@ -30,7 +30,7 @@ npm run stdb:start
 npm run stdb:publish    # builds + publishes the module to the LOCAL server as "molecule-gesture"
 npm run dev             # http://localhost:5173
 
-# optional, terminal 3: Deepgram speech recognition (otherwise the browser's own is used)
+# (voice is switched off in the app for now; see 'Voice' below)
 echo DEEPGRAM_API_KEY=your_key > .env.local
 npm run voice:server    # speech proxy on :8787 (Vite forwards /api/stt to it)
 ```
@@ -55,13 +55,13 @@ On the lobby page, click **"Try it solo"** (or open `/?role=solo`). The viewer, 
 
 1. Open `http://localhost:5173`, type a name, and click **Start class as teacher**. The top bar should show `SpacetimeDB · Live`.
 2. Click **Open student window** (or **Copy student link** to open it on another machine). The student window shows `Follow Teacher`.
-3. In the teacher window, click **📷 Enable webcam** in the bar at the bottom and allow camera and microphone access. Your camera feed fills the stage. All controls live in that one slim bar (🎤 status, hand mode, ⚙ settings, ? help), so the stage stays uncovered.
-4. **Add molecules by voice** — the mic is always on: "show me caffeine", "add benzene and ethanol". Each one is **added** next to the others (up to 8); nothing is ever replaced. Students see them appear.
+3. In the teacher window, click **📷 Enable webcam** in the bar at the bottom and allow camera access. Your camera feed fills the stage. All controls live in that one slim bar (hand mode, ⚙ settings, ? help), so the stage stays uncovered.
+4. **The stage opens with the lesson's three molecules** (ethanol, acetic acid, aspirin) side by side; students see them too. Add more from ⚙ → *Add a molecule* or *Type a name* (up to 8); nothing is ever replaced.
 5. **Move & select:** point only your index finger at a molecule. It glides onto your fingertip, follows it, and becomes the selected one (glowing, highlighted name tag).
 6. **Delete:** carry a molecule onto the **trash** (bottom left). It disappears the moment it gets there, with no need to let go, for every student too. This is the only way a molecule disappears.
-7. **Resize** the selected molecule: open or close your fingers. While they move, it grows or shrinks (fist ↔ open ≈ ×4.3); a hand that appears or holds still never changes the size. **To keep growing**, open all the way, then close and open again: after a full open, closing back is ignored (a ratchet). Likewise, after a full close, reopening is ignored, so repeated closes keep shrinking. Rest your fingers for 0.7 s to change direction.
-8. **Two hands:** both of your hands are tracked, and each works on its own molecule. For example, turn one molecule with the left hand while carrying another to the trash with the right. Two hands never drive the same molecule at once. If other people are in view, only the person with the **biggest hands** (the one closest to the camera, i.e. the teacher) is followed. Their hands are drawn in colour, ignored hands in faint grey.
-9. **Rotate** the selected molecule: hold your fingers still at any bend (not fully open) for ½ s, then turn your hand. Showing the back of your hand keeps rotating.
+7. **Resize** the molecule nearest your palm: open or close your fingers. While they move, it grows or shrinks (fist ↔ open ≈ ×4.3); a hand that appears or holds still never changes the size. **To keep growing**, open all the way, then close and open again: after a full open, closing back is ignored (a ratchet), and likewise after a full close. **When you stop** (fingers still for ½ s, a little wiggle allowed), the size locks and the hand switches to rotating, so changing gesture afterwards never shrinks it. To resize again, squeeze fully (open ↔ fist within 0.8 s) or take the hand out of view.
+8. **Two hands:** both of your hands are tracked, and each works on the molecule **nearest its own palm**. That molecule is picked when a resize or rotation starts and kept until it ends, and two hands never share one: if both palms are near the same molecule, the second hand takes the next nearest. For example, resize the left molecule with the left hand while turning the right one with the right hand. If other people are in view, only the person with the **biggest hands** (the one closest to the camera, i.e. the teacher) is followed. Their hands are drawn in colour, ignored hands in faint grey.
+9. **Rotate** the molecule nearest your palm: hold your fingers still for ½ s (after a resize at any bend; otherwise not fully open), then turn your hand. Bending the fingers while rotating never resizes. Showing the back of your hand keeps rotating.
 10. Student: **Explore Independently**, click a molecule's name, and use the arrows; the teacher is unaffected. **↩ Return to Teacher View** glides back. The teacher can **Lock students to my view** (⚙).
 
 Fallback controls (same command pipeline as the gestures): drag a molecule's name tag with the mouse (onto the trash to delete), the keys `← → ↑ ↓` / `Q E` / `+ −` / `R` act on the selected molecule, and ⚙ → *Arrow buttons* shows an on-screen pad. ⚙ also has *Add a molecule* and *Type a name*.
@@ -123,12 +123,12 @@ Hand tracking is **MediaPipe Hand Landmarker** by default (GPU, ~20–30 fps in 
 
 | Hand | Recognised by (finger curl 0 = straight … 1 = folded, from 3D landmarks) | Effect |
 |---|---|---|
-| ✋↔✊ Fingers moving | openness = 1 − mean curl, while it keeps changing | `ZOOM` on the selected molecule, relative: ×e^(1.47·Δopenness) (fist ↔ open ≈ ×4.3). Ratchet: after opening fully (≥ 0.85), the closing stroke is ignored; after closing fully (≤ 0.2), the opening stroke is. A 0.7 s rest or any mode change resets this |
-| 🔄 Fingers still | openness stays within ±0.12 for 0.5 s at any bend short of fully open (≤ 0.85) | 3D palm rotation → `ROTATE` (gain 1.2 about the vertical and viewing axes, 2.4 for forward/back tilt). Stays in rotate while the back of the hand is shown or the hand vanishes < 1.5 s |
+| ✋↔✊ Fingers moving | openness = 1 − mean curl, while it keeps changing | `ZOOM` on the molecule nearest the palm, relative: ×e^(1.47·Δopenness) (fist ↔ open ≈ ×4.3). Ratchet: after opening fully (≥ 0.85), the closing stroke is ignored; after closing fully (≤ 0.2), the opening stroke is. While the fingers rest, the size holds (and slow movement that pauses still adds up) |
+| 🔄 Fingers still (size lock) | openness stays within ±0.12 for 0.5 s: after a resize at any bend, otherwise at any bend short of fully open (≤ 0.85) | Size locked → 3D palm rotation → `ROTATE` (gain 1.2 about the vertical and viewing axes, 2.4 for forward/back tilt). Finger bending never resizes here; a full squeeze (open ≥ 0.75 ↔ fist ≤ 0.25 within 0.8 s, palm facing) goes back to resizing. Stays in rotate while the back of the hand is shown or the hand vanishes < 1.5 s |
 | ☝️ Index only | index straight, middle/ring/pinky folded, held ≥ 200 ms | `PLACE`: the molecule under the fingertip is grabbed (and selected), then follows it; released over the trash = deleted |
 | Hand gone | no confident hand for > 350 ms | `STOP` (freeze); control stays on |
 
-**Several hands.** MediaPipe looks for up to 4 hands. `HandSelector` keeps the person whose hand is biggest, since palm size in pixels doesn't change when the fingers close and the teacher is closest to the laptop. It switches to someone else only if their hand is ≥ 1.4× bigger. It also keeps that person's other hand: similar size (within 0.6–1.7×), within 7 hand-widths, preferring the opposite handedness. Each chosen hand keeps a slot (0/1) while it moves, and each slot has its own smoother, recognizer and mapper, so every command carries `{ hand: slot }`. A hand's rotate/resize go to the molecule that hand last picked up (else the selected one). A molecule being driven by one hand ignores the other hand for 0.4 s.
+**Several hands.** MediaPipe looks for up to 4 hands. `HandSelector` keeps the person whose hand is biggest, since palm size in pixels doesn't change when the fingers close and the teacher is closest to the laptop. It switches to someone else only if their hand is ≥ 1.4× bigger. It also keeps that person's other hand: similar size (within 0.6–1.7×), within 7 hand-widths, preferring the opposite handedness. Each chosen hand keeps a slot (0/1) while it moves, and each slot has its own smoother, recognizer and mapper, so every command carries `{ hand: slot }`. A hand's rotate/resize go to the molecule nearest its palm, chosen when the gesture starts and kept until it ends; a molecule the other hand is using is skipped. A molecule being driven by one hand ignores the other hand for 0.4 s.
 
 **Gesture changes freeze everything.** The status names the gesture: `OPEN_PALM` (resize), `POINTING`, `ROTATING`, `TRANSITION` or `NONE`. Three rules keep a change of gesture from moving the molecule:
 - A resize step counts only if the index finger and the other three bent together, so closing the other fingers to point is not read as "zoom out", and neither is the reverse.
@@ -143,6 +143,8 @@ Hand tracking is **MediaPipe Hand Landmarker** by default (GPU, ~20–30 fps in 
 Stability: One-Euro filtering of all 21 keypoints (2D and 3D), time-based posture hold (same behaviour at 5 or 30 fps), dead zones, and easing in the viewer adapter. Resize and rotate never overlap: every mode switch flushes pending motion, modes can't flip back within 0.4 s, and the size freezes as soon as the fingers settle. With 3D landmarks the hand's rotation is measured directly (palm basis → rotation vector), so left/right turns are never confused. Thresholds live in `DEFAULT_RECOGNIZER_CONFIG` and `DEFAULT_MAPPER_CONFIG`; finger curl is calibrated on a real open hand (straight finger ≈ 1.65 wrist-tip/wrist-MCP ratio).
 
 ### Voice: pick a molecule by name
+
+> **Switched off in the app for now.** The mic, the speech settings and the voice debug panel are gone from the UI, and nothing listens. The code below is still in the repo (`src/voice/`, `server/`) and can be wired back into `ClassroomView` if voice returns.
 
 **Speech-to-text: Deepgram Nova-3** by default, with the browser's Web Speech API as the fallback.
 - **Path:** microphone → MediaRecorder (WebM/Opus, 100 ms chunks) → `server/stt-proxy.ts` → Deepgram streaming, then transcripts back the same way.

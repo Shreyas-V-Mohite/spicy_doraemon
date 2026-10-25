@@ -116,8 +116,12 @@ test('mapper: repeat zoom — after opening all the way, re-closing is free, so 
   assert.equal(back.length, 0, 're-closing right after a full open does not shrink it back');
   const second = product(zooms(curlTo(0.6, 0)));
   assert.ok(second > 1.7, `second open grows again ×${second.toFixed(2)} (total ×${(first * second).toFixed(1)})`);
-  // Resting open frees the direction: now closing all the way shrinks, and so does the next close.
-  hold(h, OPEN, 750);
+});
+
+test('mapper: repeat zoom out — after closing all the way, reopening is free, so close-open-close keeps shrinking', () => {
+  const h = harness();
+  h.begin();
+  const curlTo = (from: number, to: number) => h.steps(Math.round(Math.abs(to - from) / 0.05), (i) => ({ curl: from + Math.sign(to - from) * (i + 1) * 0.05 }));
   const out1 = product(zooms(curlTo(0, 0.75)));
   const reopen = zooms(curlTo(0.75, 0.25));
   const out2 = product(zooms(curlTo(0.25, 0.75)));
@@ -234,10 +238,33 @@ test('mapper: a fully open hand held still stays in resize', () => {
 test('mapper: slow, continuous opening/closing never counts as "still"', () => {
   const h = harness();
   h.begin();
-  // Close over 3 s, then open over 3 s: always moving more than the steady band.
-  h.steps(60, (i) => ({ curl: Math.min(1, (i + 1) / 60) }));
-  h.steps(60, (i) => ({ curl: Math.max(0, 1 - (i + 1) / 60) }));
+  // Close slowly over 3 s without stopping: always moving more than the
+  // steady band, so it keeps resizing (and never locks into rotate).
+  const cmds = h.steps(60, (i) => ({ curl: ((i + 1) / 60) * 0.7 }));
   assert.equal(mode(h), 'ZOOM');
+  const total = product(zooms(cmds));
+  assert.ok(total < 0.5, `it resized all along (×${total.toFixed(2)})`);
+});
+
+test('size lock: after resizing, fingers that stop (a little wiggle allowed) fix the size and switch to rotate', () => {
+  for (const end of [0, 0.3]) {
+    const h = harness(true);
+    h.begin();
+    // Shrink part way, then open again to enlarge (ending fully open, or slightly bent).
+    h.steps(8, (i) => ({ curl: Math.min(0.5, (i + 1) * 0.0625) }));
+    hold(h, { curl: 0.5 }, 150);
+    const grow = h.steps(10, (i) => ({ curl: Math.max(end, 0.5 - (i + 1) * 0.05) }));
+    assert.ok(product(zooms(grow)) > 1.1, `stopped at curl ${end}: it grew ×${product(zooms(grow)).toFixed(2)}`);
+    // Stop, with a tiny wiggle: the size locks and rotation starts within ~0.7 s.
+    const still = h.steps(14, (i) => ({ curl: end + (i % 2 ? 0.03 : 0) }));
+    assert.equal(mode(h), 'ROTATE', `stopped at curl ${end}: rotate`);
+    const sizeAfterStop = product(zooms(still));
+    assert.ok(Math.abs(Math.log(sizeAfterStop)) < 0.05, `stopping barely changes the size (×${sizeAfterStop.toFixed(3)})`);
+    // Now bend the fingers into a "holding a ball" pose and turn: the size stays.
+    const bend = h.steps(10, (i) => ({ curl: end + ((i + 1) / 10) * 0.35, yaw: (i + 1) * 3 }));
+    assert.equal(zooms(bend).length, 0, 'bending the fingers while rotating never resizes');
+    assert.equal(mode(h), 'ROTATE');
+  }
 });
 
 test('mapper (2D): in rotate, twisting spins the molecule', () => {
@@ -284,14 +311,20 @@ test('mapper (3D): showing the back of the hand keeps rotating, even if the fing
   assert.ok(Math.abs(sum(cmds, 'dx')) > 60, 'and it keeps turning the molecule');
 });
 
-test('mapper: in rotate, palm facing + fingers clearly opened → back to resize', () => {
+test('mapper: in rotate, only a full squeeze (open ↔ fist) goes back to resizing', () => {
   const h = harness(true);
   h.begin();
   hold(h, HALF, 700);
-  h.steps(4, { curl: 0 });
-  assert.equal(mode(h), 'ROTATE', 'a brief change is not enough');
-  h.steps(6, { curl: 0 });
+  assert.equal(mode(h), 'ROTATE');
+  // Opening part way or all the way, and staying: still rotating.
+  h.steps(10, { curl: 0 });
+  assert.equal(mode(h), 'ROTATE', 'opening alone is not enough');
+  // Open, then a full fist within 0.8 s: resize again.
+  h.steps(5, { curl: 1 });
   assert.equal(mode(h), 'ZOOM');
+  // …and opening right away resizes (resting in a fist would lock it again).
+  const grow = product(zooms(h.steps(10, (i) => ({ curl: Math.max(0.5, 1 - (i + 1) * 0.05) }))));
+  assert.ok(grow > 1.3, `the next opening resizes (×${grow.toFixed(2)})`);
 });
 
 test('mapper: rotate survives the hand vanishing briefly', () => {

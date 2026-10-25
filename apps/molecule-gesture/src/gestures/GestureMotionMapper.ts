@@ -15,21 +15,27 @@ export type MotionMode = 'ZOOM' | 'ROTATE' | 'MOVE' | 'HOLD';
 
 export interface MapperConfig {
   /**
-   * Entering ROTATE: the fingers must stay within `steadyBand` of openness
-   * for `rotateHoldMs`, at any bend short of fully open (≤ rotateMaxOpenness).
-   * While the fingers keep moving, it is a resize.
+   * Size lock → ROTATE: once the fingers stop moving (they stay within
+   * `steadyBand` of openness, so a little wiggle still counts as still) for
+   * `rotateHoldMs`, the size is fixed and the hand rotates the molecule.
+   * After a resize this happens at any bend, fully open included; a hand that
+   * has not resized anything yet must be bent at least a little
+   * (openness ≤ `rotateMaxOpenness`), so an open hand just raised stays ready
+   * to resize. While the fingers keep moving, it is a resize.
    */
   rotateHoldMs: number;
   steadyBand: number;
   rotateMaxOpenness: number;
   /**
-   * Leaving ROTATE for resize: only while the palm faces the camera roughly
-   * as when rotation started (finger readings are unreliable on the back of
-   * the hand or edge-on), and the openness has changed by more than
-   * `exitRotateDelta` for `exitRotateMs`.
+   * Back to resizing from ROTATE: a deliberate full squeeze — the fingers go
+   * from open (≥ resumeZoomHigh) to closed (≤ resumeZoomLow), or the other
+   * way, within `resumeZoomWindowMs`, with the palm facing the camera as when
+   * rotation started (finger readings are unreliable on the back of the
+   * hand). Bending the fingers part way, as you do to rotate, never resizes.
    */
-  exitRotateDelta: number;
-  exitRotateMs: number;
+  resumeZoomLow: number;
+  resumeZoomHigh: number;
+  resumeZoomWindowMs: number;
   /** After any mode switch, no other switch for this long (no flip-flopping). */
   minModeDwellMs: number;
   /** While resizing, the size only follows the fingers for this long after they last moved. */
@@ -68,12 +74,11 @@ export interface MapperConfig {
    * all the way (openness ≥ zoomArmOpen) or closed all the way (≤
    * zoomArmClosed) — makes the stroke back free, so open-close-open keeps
    * growing and close-open-close keeps shrinking. A stroke that stops part
-   * way doesn't, so a plain open-then-close still grows then shrinks.
+   * way doesn't, so a plain open-then-close still grows then shrinks. The
+   * direction is free again after any mode change (resting locks the size).
    */
   zoomArmOpen: number;
   zoomArmClosed: number;
-  /** After resting this long (or any mode change), the next stroke may go either way. */
-  zoomDirResetMs: number;
   /**
    * A resize is all four fingers bending together. Each resize step compares
    * how far the index finger and the other three moved since the last step;
@@ -104,10 +109,11 @@ export const DEFAULT_MAPPER_CONFIG: MapperConfig = {
   rotateHoldMs: 500,
   steadyBand: 0.12,
   rotateMaxOpenness: 0.85,
-  exitRotateDelta: 0.25,
-  exitRotateMs: 400,
+  resumeZoomLow: 0.25,
+  resumeZoomHigh: 0.75,
+  resumeZoomWindowMs: 800,
   minModeDwellMs: 400,
-  scaleFollowMs: 200,
+  scaleFollowMs: 120,
   facingMaxDeg: 55,
   rotateKeepAfterLostMs: 1500,
   rotate3dGainX: 2.4,
@@ -124,7 +130,6 @@ export const DEFAULT_MAPPER_CONFIG: MapperConfig = {
   zoomDeadZone: 0.04,
   zoomArmOpen: 0.85,
   zoomArmClosed: 0.2,
-  zoomDirResetMs: 700,
   zoomFingerAgreement: 0.35,
   transitionIndexMaxCurl: 0.35,
   transitionSpread: 0.25,
@@ -185,10 +190,12 @@ export class GestureMotionMapper {
   private steadyMin = 0;
   private steadyMax = 0;
   // ROTATE bookkeeping.
-  private rotateOpenness = 0;
+  /** Openness while rotating (recent samples), to spot the full squeeze that resumes resizing. */
+  private rotateHistory: { t: number; o: number }[] = [];
+  /** This resize session changed the size: stopping now locks it, at any bend. */
+  private resized = false;
   private normalAtRotate: [number, number, number] | null = null;
   private flipAtRotate = 0;
-  private exitSince: number | null = null;
   private modeSince = 0;
   private lostAt: number | null = null;
 
@@ -200,7 +207,6 @@ export class GestureMotionMapper {
   private transition = false;
   /** Direction of the current run of zoom strokes (0 = not yet chosen). */
   private zoomDir = 0;
-  private zoomStepAt = 0;
   private lastPoint: { x: number; y: number } | null = null;
 
   constructor(config: Partial<MapperConfig> = {}) {
@@ -229,7 +235,7 @@ export class GestureMotionMapper {
     const rotateProgress =
       this.mode === 'ROTATE'
         ? 1
-        : this.mode === 'ZOOM' && this.steadySince !== null && this.openness <= c.rotateMaxOpenness
+        : this.mode === 'ZOOM' && this.steadySince !== null && (this.resized || this.openness <= c.rotateMaxOpenness)
           ? Math.min(1, (this.lastT - this.steadySince) / c.rotateHoldMs)
           : 0;
     return {
@@ -301,18 +307,20 @@ export class GestureMotionMapper {
       const facing = this.facingAsAtRotate(basis, flip);
       if (facing && canSwitch && rec.posture === 'POINT') {
         this.enter('MOVE', out, wx, wy, roll, flip, basis);
-      } else if (facing && Math.abs(this.openness - this.rotateOpenness) > c.exitRotateDelta) {
-        if (this.exitSince === null) this.exitSince = t;
-        if (canSwitch && t - this.exitSince >= c.exitRotateMs) this.enter('ZOOM', out, wx, wy, roll, flip, basis);
-      } else {
-        this.exitSince = null;
+      } else if (facing) {
+        const h = this.rotateHistory;
+        h.push({ t, o: this.openness });
+        while (h.length && t - h[0].t > c.resumeZoomWindowMs) h.shift();
+        const lo = Math.min(...h.map((x) => x.o));
+        const hi = Math.max(...h.map((x) => x.o));
+        if (canSwitch && lo <= c.resumeZoomLow && hi >= c.resumeZoomHigh) this.enter('ZOOM', out, wx, wy, roll, flip, basis);
       }
     } else if (rec.posture === 'POINT') {
       if (this.mode !== 'MOVE') this.enter('MOVE', out, wx, wy, roll, flip, basis);
     } else {
       if (this.mode === 'MOVE' && !canSwitch) return out;
       if (this.mode !== 'ZOOM') this.enter('ZOOM', out, wx, wy, roll, flip, basis);
-      // Fingers held still (at any bend short of fully open) → rotate.
+      // Fingers stopped (a little wiggle allowed): fix the size and rotate.
       const o = this.openness;
       if (this.steadySince === null || o < this.steadyMax - c.steadyBand || o > this.steadyMin + c.steadyBand) {
         this.steadySince = t;
@@ -321,7 +329,7 @@ export class GestureMotionMapper {
         this.steadyMin = Math.min(this.steadyMin, o);
         this.steadyMax = Math.max(this.steadyMax, o);
       }
-      if (o <= c.rotateMaxOpenness && t - this.steadySince >= c.rotateHoldMs) {
+      if ((this.resized || o <= c.rotateMaxOpenness) && t - this.steadySince >= c.rotateHoldMs) {
         this.enter('ROTATE', out, wx, wy, roll, flip, basis);
       }
     }
@@ -349,20 +357,22 @@ export class GestureMotionMapper {
         } else if (Math.abs(d) > c.zoomDeadZone && agree) {
           this.setZoomAnchor(rec);
           const dir = Math.sign(d);
-          if (t - this.zoomStepAt > c.zoomDirResetMs) this.zoomDir = 0; // rested: either way again
-          this.zoomStepAt = t;
           if (this.zoomDir === 0 || dir === this.zoomDir) {
             out.push({ type: 'ZOOM', factor: Math.exp(d * c.zoomGain) });
+            this.resized = true;
             if (dir > 0 && this.openness >= c.zoomArmOpen) this.zoomDir = 1;
             else if (dir < 0 && this.openness <= c.zoomArmClosed) this.zoomDir = -1;
           }
           // else: the stroke back after running out of range — the size stays.
         }
         // else: not sure yet (e.g. the index lags a little) — keep measuring from the anchor.
-      } else {
-        // Still fingers (or settling): follow quietly so the next move starts from here.
-        if (t >= this.zoomBlockedUntil) this.transition = false;
+      } else if (t - this.startedAt < c.settleAfterStartMs || t < this.zoomBlockedUntil) {
+        // Settling (tracking just started, or a new mode): follow quietly so the next move starts from here.
         this.setZoomAnchor(rec);
+      } else {
+        // Fingers resting: the size holds, and the anchor stays where it was, so
+        // a slow resize that pauses now and then still adds up correctly.
+        this.transition = false;
       }
     } else if (this.mode === 'ROTATE' && basis) {
       // True 3D: the molecule turns the way the hand turns (scaled).
@@ -427,7 +437,8 @@ export class GestureMotionMapper {
     this.modeSince = this.lastT;
     this.anchor(wx, wy, roll, flip, basis);
     this.steadySince = null;
-    this.exitSince = null;
+    this.rotateHistory = [];
+    this.resized = false;
     this.lastPoint = null;
     this.zoomAnchor = this.openness;
     this.zoomAnchorCurls = null;
@@ -436,7 +447,6 @@ export class GestureMotionMapper {
     // Resizing only starts once the hand has settled into the new mode.
     if (mode === 'ZOOM') this.zoomBlockedUntil = this.lastT + this.config.zoomStableMs;
     if (mode === 'ROTATE') {
-      this.rotateOpenness = this.openness;
       this.normalAtRotate = basis ? [basis[2], basis[5], basis[8]] : null;
       this.flipAtRotate = flip;
     }

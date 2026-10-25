@@ -5,20 +5,14 @@
  * The teacher's webcam is Chrome's fake capture device fed with a Y4M built
  * from a real hand photo (scripts/make-fake-webcam.ts), so the hand pipeline
  * runs for real: getUserMedia → MediaPipe → gestures → 3Dmol → SpacetimeDB.
- * Speech can't be produced headless, so voice transcripts go straight into
- * the same handler the speech recogniser feeds.
+ * The stage opens with the lesson's three molecules (ethanol, acetic acid,
+ * aspirin); more are added through the same path as ⚙ → Type a name.
  *
  *   npx tsx scripts/e2e.ts <fake-webcam.y4m> [screenshotDir] [--crowd=<crowd.y4m>]
  * Env: E2E_URL (default http://localhost:5173/), CHROME_PATH, E2E_TEACHER_QUERY.
- *
- * Speech: the real speech proxy (server/stt-proxy.ts) is started on port 8787
- * against a fake Deepgram (scripts/fakeDeepgram.ts), so the browser's real
- * microphone stream (Chrome's fake audio device) goes through the proxy.
  */
-import { spawn } from 'node:child_process';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { chromium, type Page } from 'playwright-core';
-import { startFakeDeepgram } from './fakeDeepgram';
 
 const BASE = process.env.E2E_URL ?? 'http://localhost:5173/';
 const CHROME = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
@@ -39,7 +33,6 @@ interface SlotDebug {
   fit: { radius: number; distance: number; minDistance: number; maxDistance: number } | null;
 }
 interface Debug {
-  say(text: string): Promise<void>;
   scene(): SlotDebug[];
   items(): { key: string; moleculeId: string; seq: number; gesture: string }[];
   activeKey(): string | null;
@@ -97,7 +90,6 @@ async function waitFor(p: Page, pred: (d: Snap) => boolean, ms: number) {
   return null;
 }
 
-const say = (p: Page, text: string) => p.evaluate(`window.__mgl.say(${JSON.stringify(text)})`);
 const byMol = (d: Snap, id: string) => d.scene.find((s) => s.moleculeId === id);
 const loadedAll = (d: Snap, n: number) => d.scene.length === n && d.scene.every((s) => s.loaded === s.moleculeId);
 
@@ -127,28 +119,7 @@ async function dragChip(p: Page, name: string, to: { x: number; y: number } | 't
   if (release) await p.mouse.up();
 }
 
-const STT_PORT = 8787;
-const FAKE_DEEPGRAM_PORT = 8790;
-const FAKE_KEY = 'e2e-test-key';
-
-/** The real speech proxy, pointed at the fake Deepgram. */
-async function startSpeechProxy() {
-  const health = () =>
-    fetch(`http://localhost:${STT_PORT}/api/stt/health`)
-      .then((r) => r.json() as Promise<{ deepgram: boolean }>)
-      .catch(() => null);
-  if (await health()) throw new Error(`port ${STT_PORT} is in use — stop \`npm run voice:server\` before the e2e test`);
-  const proc = spawn(process.execPath, [join(import.meta.dirname, '../node_modules/tsx/dist/cli.mjs'), join(import.meta.dirname, '../server/stt-proxy.ts')], {
-    env: { ...process.env, DEEPGRAM_API_KEY: FAKE_KEY, DEEPGRAM_URL: `ws://localhost:${FAKE_DEEPGRAM_PORT}/v1/listen`, STT_PROXY_PORT: String(STT_PORT) },
-    stdio: 'ignore',
-  });
-  for (let i = 0; i < 100 && !(await health()); i++) await new Promise((r) => setTimeout(r, 100));
-  return proc;
-}
-
 async function main() {
-  const deepgram = startFakeDeepgram(FAKE_DEEPGRAM_PORT);
-  const proxy = await startSpeechProxy();
   const browser = await chromium.launch({
     executablePath: CHROME,
     headless: true,
@@ -162,59 +133,101 @@ async function main() {
   });
   const room = `E2E-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
   const teacherCtx = await browser.newContext({ viewport: { width: 1400, height: 860 } });
-  // Headless Chrome's fake microphone plays beeps that the real recogniser turns
-  // into random words; the test feeds words itself, so switch the real one off.
-  await teacherCtx.addInitScript('delete window.SpeechRecognition; delete window.webkitSpeechRecognition;');
   const teacher = await teacherCtx.newPage();
   const student = await (await browser.newContext({ viewport: { width: 1200, height: 800 } })).newPage();
   for (const [label, p] of [['teacher', teacher], ['student', student]] as const) {
     p.on('pageerror', (e) => console.log(`[${label} pageerror]`, e.message));
   }
 
-  await teacher.goto(`${BASE}?room=${room}&role=teacher&name=Prof%20E2E&debug=voice${process.env.E2E_TEACHER_QUERY ?? ''}`);
+  await teacher.goto(`${BASE}?room=${room}&role=teacher&name=Prof%20E2E${process.env.E2E_TEACHER_QUERY ?? ''}`);
   check('teacher connects to SpacetimeDB and owns the room', !!(await waitFor(teacher, (d) => d.isRoomTeacher && d.ready, 20000)), `room ${room}`);
   await student.goto(`${BASE}?room=${room}&role=student&name=Student%20E2E`);
   check('student joins the same room', !!(await waitFor(student, (d) => d.ready && d.participants >= 2, 20000)));
-  check('the stage starts empty', ((await dbg(teacher))?.scene.length ?? -1) === 0);
-
-  // --- voice adds molecules (never replaces) ----------------------------
-  await say(teacher, 'show me benzene');
-  check('voice "show me benzene" adds benzene', !!(await waitFor(teacher, (d) => loadedAll(d, 1), 15000)));
-  await say(teacher, 'show me acetic acid');
-  check(
-    'voice "show me acetic acid" adds a 2nd molecule from PubChem',
-    !!(await waitFor(teacher, (d) => loadedAll(d, 2) && !!byMol(d, 'pubchem:176'), 20000)),
-  );
-  await say(teacher, 'so the electrons are delocalized around the ring');
-  await say(teacher, 'show me caffeine');
+  // --- start-up: the lesson's three molecules, side by side ----------------
+  const LESSON = ['builtin:ethanol', 'pubchem:176', 'builtin:aspirin'];
   const three = await waitFor(teacher, (d) => loadedAll(d, 3), 15000);
-  check('a 3rd molecule is added; lecture speech ignored', !!three, three?.scene.map((s) => s.moleculeId).join(', '));
+  check(
+    'the stage opens with ethanol, acetic acid and aspirin',
+    !!three && LESSON.every((id) => !!byMol(three, id)),
+    three?.scene.map((s) => s.moleculeId).join(', '),
+  );
   await teacher.waitForTimeout(800);
   const t3 = (await dbg(teacher))!;
-  const pl = t3.scene.map((s) => s.placement!);
-  const minGap = Math.min(...pl.flatMap((a, i) => pl.slice(i + 1).map((b) => Math.hypot(a.x - b.x, a.y - b.y))));
-  check('new molecules are placed apart (no overlap)', minGap > 0.12, `closest pair ${minGap.toFixed(2)} viewer-widths`);
-  check('the newest molecule is selected', byMol(t3, 'builtin:caffeine')?.key === t3.active);
+  const xs = LESSON.map((id) => byMol(t3, id)!.placement!);
+  const scales = LESSON.map((id) => byMol(t3, id)!.scale!);
+  check(
+    '…in a row, left to right, at the same size',
+    xs[0].x < xs[1].x - 0.2 && xs[1].x < xs[2].x - 0.2 && xs.every((p) => Math.abs(p.y) < 0.02) && Math.max(...scales) / Math.min(...scales) < 1.01,
+    xs.map((p) => p.x.toFixed(2)).join(' / '),
+  );
+  check('the last one (aspirin) is selected', byMol(t3, 'builtin:aspirin')?.key === t3.active);
   check('student sees all 3 molecules', !!(await waitFor(student, (d) => loadedAll(d, 3), 20000)));
+  await teacher.reload();
+  await waitFor(teacher, (d) => d.isRoomTeacher && d.ready, 20000);
+  await teacher.waitForTimeout(1500);
+  check('reloading the teacher page does not add them again', (await dbg(teacher))!.scene.length === 3);
+
+  // --- each hand works on the molecule nearest its own palm -------------------
+  /** A hand command with that hand's palm at (x, y) in the camera frame (as displayed). */
+  const handCmd = (hand: number, x: number, cmd: object) =>
+    teacher.evaluate(`window.__mgl.command(${JSON.stringify(cmd)}, ${JSON.stringify({ hand, palm: { x, y: 0.5, frameAspect: 4 / 3 } })})`);
+  const scaleOf = (d: Snap, id: string) => byMol(d, id)!.scale!;
+  const grew = (a: Snap, b: Snap, id: string) => scaleOf(b, id) / scaleOf(a, id);
+  const p0 = (await dbg(teacher))!;
+  await handCmd(0, 0.2, { type: 'ZOOM', factor: 1.4 }); // palm on the left, where ethanol is
+  await teacher.waitForTimeout(400); // let the resize ease in (STOP drops what is still pending)
+  await handCmd(0, 0.2, { type: 'STOP' });
+  await teacher.waitForTimeout(500);
+  const p1 = (await dbg(teacher))!;
+  check(
+    'a hand on the left resizes only the molecule nearest its palm (ethanol), not the selected one',
+    grew(p0, p1, 'builtin:ethanol') > 1.3 && Math.abs(grew(p0, p1, 'builtin:aspirin') - 1) < 0.01 && Math.abs(grew(p0, p1, 'pubchem:176') - 1) < 0.01,
+    `ethanol ×${grew(p0, p1, 'builtin:ethanol').toFixed(2)}, aspirin ×${grew(p0, p1, 'builtin:aspirin').toFixed(2)}`,
+  );
+  await handCmd(1, 0.8, { type: 'ZOOM', factor: 1.4 }); // the other hand, on the right
+  await teacher.waitForTimeout(400);
+  await handCmd(1, 0.8, { type: 'STOP' });
+  await teacher.waitForTimeout(500);
+  const p2 = (await dbg(teacher))!;
+  check(
+    '…and a hand on the right resizes only aspirin',
+    grew(p1, p2, 'builtin:aspirin') > 1.3 && Math.abs(grew(p1, p2, 'builtin:ethanol') - 1) < 0.01,
+    `aspirin ×${grew(p1, p2, 'builtin:aspirin').toFixed(2)}`,
+  );
+  // Both palms near ethanol at once: the first hand has it, the second gets the next nearest.
+  await handCmd(0, 0.2, { type: 'ZOOM', factor: 1 / 1.4 });
+  await handCmd(1, 0.25, { type: 'ZOOM', factor: 1 / 1.4 });
+  await teacher.waitForTimeout(400);
+  await handCmd(0, 0.2, { type: 'STOP' });
+  await handCmd(1, 0.25, { type: 'STOP' });
+  await teacher.waitForTimeout(500);
+  const p3 = (await dbg(teacher))!;
+  check(
+    'two hands never share a molecule: the second hand takes the next nearest',
+    grew(p2, p3, 'builtin:ethanol') < 0.8 && grew(p2, p3, 'pubchem:176') < 0.8 && Math.abs(grew(p2, p3, 'builtin:aspirin') - 1) < 0.01,
+    `ethanol ×${grew(p2, p3, 'builtin:ethanol').toFixed(2)}, acetic acid ×${grew(p2, p3, 'pubchem:176').toFixed(2)}`,
+  );
+  await teacher.click('.mol-chip:has-text("Aspirin")'); // select aspirin again for the key tests below
+  await teacher.waitForTimeout(300);
 
   // --- gestures/buttons act on the selected molecule only ----------------
-  const caf = (d: Snap) => byMol(d, 'builtin:caffeine')!;
-  const ben = (d: Snap) => byMol(d, 'builtin:benzene')!;
+  const asp = (d: Snap) => byMol(d, 'builtin:aspirin')!;
+  const eth = (d: Snap) => byMol(d, 'builtin:ethanol')!;
   const before = (await dbg(teacher))!;
   for (let i = 0; i < 6; i++) await teacher.keyboard.press('ArrowRight');
   await teacher.waitForTimeout(1500);
   let t = (await dbg(teacher))!;
   let s = (await dbg(student))!;
-  check('rotation turns the selected molecule', angleDeg(caf(before).view, caf(t).view) > 30, `${angleDeg(caf(before).view, caf(t).view).toFixed(1)}°`);
-  check('…and leaves the others alone', angleDeg(ben(before).view, ben(t).view) < 0.5);
+  check('rotation turns the selected molecule', angleDeg(asp(before).view, asp(t).view) > 30, `${angleDeg(asp(before).view, asp(t).view).toFixed(1)}°`);
+  check('…and leaves the others alone', angleDeg(eth(before).view, eth(t).view) < 0.5);
   check(
     'student follows each molecule',
-    angleDeg(caf(t).view, caf(s).view) < 1 && angleDeg(ben(t).view, ben(s).view) < 1,
-    `residual ${angleDeg(caf(t).view, caf(s).view).toFixed(2)}°`,
+    angleDeg(asp(t).view, asp(s).view) < 1 && angleDeg(eth(t).view, eth(s).view) < 1,
+    `residual ${angleDeg(asp(t).view, asp(s).view).toFixed(2)}°`,
   );
 
   // --- throttling --------------------------------------------------------
-  const seqOf = (d: Snap) => d.items.find((i) => i.moleculeId === 'builtin:caffeine')!.seq;
+  const seqOf = (d: Snap) => d.items.find((i) => i.moleculeId === 'builtin:aspirin')!.seq;
   const seqA = seqOf(t);
   const tStart = Date.now();
   while (Date.now() - tStart < 3000) await teacher.keyboard.press('ArrowLeft');
@@ -248,42 +261,42 @@ async function main() {
   check('settings menu closes (stage uncovered)', (await teacher.locator('.dock-menu').count()) === 0);
 
   // --- move by dragging, delete via the trash ----------------------------
-  await dragChip(teacher, 'Benzene', { x: 0.62, y: 0.3 });
+  await dragChip(teacher, 'Ethanol', { x: 0.62, y: 0.3 });
   await teacher.waitForTimeout(800);
   t = (await dbg(teacher))!;
   check(
     'a molecule can be moved',
-    Math.hypot(ben(t).placement!.x - ben(before).placement!.x, ben(t).placement!.y - ben(before).placement!.y) > 0.1,
+    Math.hypot(eth(t).placement!.x - eth(before).placement!.x, eth(t).placement!.y - eth(before).placement!.y) > 0.1,
   );
   await student.waitForTimeout(800);
   s = (await dbg(student))!;
   check(
     'student sees it moved',
-    Math.abs(ben(s).placement!.x - ben(t).placement!.x) < 0.05,
-    `teacher x ${ben(t).placement!.x.toFixed(2)} / student x ${ben(s).placement!.x.toFixed(2)}`,
+    Math.abs(eth(s).placement!.x - eth(t).placement!.x) < 0.05,
+    `teacher x ${eth(t).placement!.x.toFixed(2)} / student x ${eth(s).placement!.x.toFixed(2)}`,
   );
   // Into the trash zone with the mouse button still held: it must go without a release.
-  await dragChip(teacher, 'Benzene', 'trash', false);
-  const goneHeld = await waitFor(teacher, (d) => d.scene.length === 2 && !byMol(d, 'builtin:benzene'), 3000);
+  await dragChip(teacher, 'Ethanol', 'trash', false);
+  const goneHeld = await waitFor(teacher, (d) => d.scene.length === 2 && !byMol(d, 'builtin:ethanol'), 3000);
   const trashClass = (await teacher.getAttribute('.trash', 'class')) ?? '';
   await teacher.mouse.up();
   check('entering the trash deletes it at once (no release needed)', !!goneHeld);
   check('…and the trash icon returns to normal', !/is-over|is-armed/.test(trashClass), trashClass);
-  check('…for the student too', !!(await waitFor(student, (d) => d.scene.length === 2 && !byMol(d, 'builtin:benzene'), 8000)));
-  await dragChip(teacher, 'Caffeine', { x: 0.45, y: 0.55 });
+  check('…for the student too', !!(await waitFor(student, (d) => d.scene.length === 2 && !byMol(d, 'builtin:ethanol'), 8000)));
+  await dragChip(teacher, 'Aspirin', { x: 0.45, y: 0.55 });
   await teacher.waitForTimeout(600);
   const afterDrop = (await dbg(teacher))!;
   const stageBox = (await teacher.locator('.stage').boundingBox())!;
   const want = { x: -0.05, y: (0.05 * stageBox.height) / stageBox.width };
-  const got = caf(afterDrop).placement!;
+  const got = asp(afterDrop).placement!;
   check(
     'dropping anywhere else moves it there and keeps it',
     afterDrop.scene.length === 2 && Math.hypot(got.x - want.x, got.y - want.y) < 0.03,
-    `caffeine at (${got.x.toFixed(2)}, ${got.y.toFixed(2)}), wanted (${want.x.toFixed(2)}, ${want.y.toFixed(2)})`,
+    `aspirin at (${got.x.toFixed(2)}, ${got.y.toFixed(2)}), wanted (${want.x.toFixed(2)}, ${want.y.toFixed(2)})`,
   );
 
   // --- size limits: zooming stops where the molecule still fits on screen ---------
-  const fitOf = (d: Snap) => caf(d).fit!;
+  const fitOf = (d: Snap) => asp(d).fit!;
   for (let i = 0; i < 40; i++) await teacher.keyboard.press('+');
   await teacher.waitForTimeout(700);
   const big = (await dbg(teacher))!;
@@ -296,8 +309,8 @@ async function main() {
     const f = fitOf(d);
     const pxPerUnit = sb.height / 2 / (f.distance * Math.tan((10 * Math.PI) / 180));
     const r = f.radius * pxPerUnit;
-    const cx = sb.width / 2 + caf(d).placement!.x * sb.width;
-    const cy = sb.height / 2 + caf(d).placement!.y * sb.width;
+    const cx = sb.width / 2 + asp(d).placement!.x * sb.width;
+    const cy = sb.height / 2 + asp(d).placement!.y * sb.width;
     return { r, inside: cx - r >= -1 && cx + r <= sb.width + 1 && cy - r >= -1 && cy + r <= sb.height + 1 };
   };
   const bigFit = onScreen(big);
@@ -308,7 +321,7 @@ async function main() {
   );
   check(
     '…and more zoom-in at the maximum changes nothing (no jitter)',
-    Math.abs(Math.log((bigger.scene.find((x) => x.key === caf(big).key)!.scale ?? 1) / (caf(big).scale ?? 1))) < 0.002,
+    Math.abs(Math.log((bigger.scene.find((x) => x.key === asp(big).key)!.scale ?? 1) / (asp(big).scale ?? 1))) < 0.002,
   );
   for (let i = 0; i < 60; i++) await teacher.keyboard.press('-');
   await teacher.waitForTimeout(700);
@@ -359,109 +372,21 @@ async function main() {
   })()`)) as { videoWidth: number; playing: boolean };
   check('webcam fills the stage behind the molecules (AR view)', backdrop.videoWidth > 0 && backdrop.playing);
 
-  // --- voice speed ------------------------------------------------------------
+  // --- adding more: ⚙ → Type a name (bundled pack, no PubChem round trip) ------
   const pubchemCalls: string[] = [];
   teacher.on('request', (r) => {
     if (r.url().includes('pubchem.ncbi')) pubchemCalls.push(r.url());
   });
-  /** Speak (final or live words) and time, in the page, until the scene has `n` molecules. */
-  const timeToScene = (fn: 'say' | 'sayLive', text: string, n: number) =>
-    teacher.evaluate(
-      `(async () => {
-        const t0 = performance.now();
-        window.__mgl.${fn}(${JSON.stringify(text)});
-        while (window.__mgl.items().length < ${n}) {
-          if (performance.now() - t0 > 8000) return -1;
-          await new Promise((r) => setTimeout(r, 10));
-        }
-        return Math.round(performance.now() - t0);
-      })()`,
-    ) as Promise<number>;
-  const packMs = await timeToScene('say', 'show me vanillin', 3);
-  const withVanillin = await waitFor(teacher, (d) => loadedAll(d, 3), 10000);
-  check(
-    'a common molecule ("vanillin") comes from the bundled pack — no PubChem round trip',
-    !!withVanillin && packMs >= 0 && pubchemCalls.length === 0,
-    `in the scene ${packMs} ms after the phrase, ${pubchemCalls.length} PubChem requests`,
-  );
-  // Live (not yet final) words are captions only: nothing changes until the phrase is final.
-  await teacher.evaluate(`window.__mgl.sayLive(${JSON.stringify('okay so show me menthol')})`);
-  await teacher.waitForTimeout(1500);
-  check('live (partial) words never change the scene', ((await dbg(teacher))?.scene.length ?? 0) === 3);
-  await say(teacher, 'okay so show me menthol');
-  check('…the finished phrase does', !!(await waitFor(teacher, (d) => loadedAll(d, 4), 8000)));
-
-  // --- Deepgram Nova-3 through the proxy ------------------------------------------
-  const conn = await (async () => {
-    for (let i = 0; i < 100; i++) {
-      const c = deepgram.connections.find((x) => x.audioBytes > 0);
-      if (c) return c;
-      await teacher.waitForTimeout(100);
-    }
-    return null;
-  })();
-  check(
-    'the microphone streams to Deepgram through the proxy',
-    !!conn,
-    conn ? `${conn.audioBytes} bytes of audio so far` : `${deepgram.connections.length} connections, no audio`,
-  );
-  check('the proxy, not the browser, holds the Deepgram key', conn?.auth === `Token ${FAKE_KEY}` && !(await teacher.content()).includes(FAKE_KEY));
-  const kt = conn?.url.searchParams.getAll('keyterm') ?? [];
-  check(
-    'Nova-3 with chemistry keyterms',
-    conn?.url.searchParams.get('model') === 'nova-3' && ['cyclohexane', 'benzene', 'ethanol', 'caffeine', 'buckminsterfullerene'].every((k) => kt.includes(k)),
-    `${kt.length} keyterms`,
-  );
-  const panel = (field: string) => teacher.locator(`.voice-debug [data-field="${field}"]`).innerText();
-  check('debug panel shows the engine in use', (await teacher.locator('.voice-debug__engine').innerText()).includes('Deepgram'));
-  const before5 = (await dbg(teacher))!.scene.length;
-  deepgram.interim('show me');
-  await teacher.waitForTimeout(150);
-  deepgram.interim('show me cyclohexane');
-  await teacher.waitForTimeout(300);
-  const liveCaption = await panel('live');
-  deepgram.final('show me', false); // a final segment, but the utterance goes on
-  await teacher.waitForTimeout(1200);
-  check(
-    'Deepgram partial results and unfinished segments change nothing',
-    (await dbg(teacher))!.scene.length === before5 && liveCaption.includes('cyclohexane'),
-    `caption "${liveCaption}"`,
-  );
-  deepgram.final('cyclohexane.', true);
-  const withCyclo = await waitFor(teacher, (d) => loadedAll(d, before5 + 1) && !!d.scene.find((x) => x.moleculeId === 'pubchem:8078'), 8000);
-  check('the finished utterance adds the molecule ("show me cyclohexane.")', !!withCyclo);
-  await teacher.waitForTimeout(300);
-  const raw = await panel('raw');
-  const command = await panel('command');
-  const validated = await panel('validated');
-  check(
-    'debug panel: raw transcript, interpreted command, PubChem-validated molecule',
-    raw === 'show me cyclohexane.' && command === 'ADD cyclohexane' && /Cyclohexane \(PubChem CID 8078\)/.test(validated),
-    `"${raw}" → ${command} → ${validated}`,
-  );
-  deepgram.final('the ring flips between two chair shapes', true);
-  await teacher.waitForTimeout(800);
-  check('lecture speech through Deepgram is ignored', (await dbg(teacher))!.scene.length === before5 + 1 && (await panel('command')).startsWith('none'));
-
-  // Fallback: without the proxy, voice falls back to the browser's Web Speech API.
-  proxy.kill();
-  await new Promise((r) => setTimeout(r, 300));
-  const solo = await (await browser.newContext({ viewport: { width: 1000, height: 700 } })).newPage();
-  await solo.goto(`${BASE}?role=solo&name=Fallback&debug=voice`);
-  const engineText = await solo
-    .waitForFunction(() => document.querySelector('.voice-debug__engine')?.textContent?.includes('Browser'), null, { timeout: 8000 })
-    .then(() => solo.locator('.voice-debug__engine').innerText())
-    .catch(() => solo.locator('.voice-debug__engine').innerText().catch(() => ''));
-  const note = await solo.locator('.voice-debug__note').innerText().catch(() => '');
-  check('no speech server → falls back to the browser engine (Web Speech API)', engineText.includes('Browser'), note || engineText);
+  const n0 = (await dbg(teacher))!.scene.length;
+  await teacher.evaluate(`window.__mgl.addByName('vanillin')`);
+  const withVanillin = await waitFor(teacher, (d) => loadedAll(d, n0 + 1), 10000);
+  check('typing a name adds that molecule (vanillin, from the bundled pack)', !!withVanillin && pubchemCalls.length === 0, `${pubchemCalls.length} PubChem requests`);
 
   if (shots) {
     await teacher.screenshot({ path: `${shots}/teacher.png` });
     await student.screenshot({ path: `${shots}/student.png` });
   }
   await browser.close();
-  proxy.kill();
-  await deepgram.close();
 
   // --- several people in view: only the closest person's two hands ------------
   if (crowdY4m) {
