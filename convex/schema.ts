@@ -33,4 +33,21 @@ export default defineSchema({
 
   // Public: at most one current visual per session.
   published_visuals: defineTable(visualFields).index("by_session", ["sessionId"]),
+
+  // Professor only: the copilot's answer to one question. previewId is set
+  // only when the chemistry service verified the proposed highlight.
+  suggestions: defineTable({
+    sessionId: v.id("sessions"),
+    questionId: v.id("questions"),
+    explanation: v.string(),
+    sourceIds: v.array(v.string()),
+    teachingAction: v.string(),
+    molecule: v.string(),
+    groupId: v.string(),
+    previewId: v.optional(v.id("previews")),
+    note: v.optional(v.string()),
+    cached: v.boolean(),
+  })
+    .index("by_session", ["sessionId"])
+    .index("by_question", ["questionId"]),
 });

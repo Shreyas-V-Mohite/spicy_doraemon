@@ -30,3 +30,16 @@ export interface Visual {
 export interface Preview extends Visual {
   _id: string;
 }
+
+export interface Suggestion {
+  _id: string;
+  questionId: string;
+  explanation: string;
+  sourceIds: string[];
+  teachingAction: string;
+  molecule: string;
+  groupId: string;
+  previewId?: string;
+  note?: string;
+  cached: boolean;
+}

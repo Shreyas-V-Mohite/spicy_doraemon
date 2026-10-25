@@ -1,6 +1,9 @@
 import { Link, useParams } from "react-router-dom";
 import { useStore } from "../store/sessionStore";
-import { getProfessorToken } from "../lib/identity";
+import { useState } from "react";
+import { errorMessage, getProfessorToken } from "../lib/identity";
+import { EXCERPTS } from "../../../../convex/lib/lesson";
+import type { Suggestion } from "../types";
 import VisualPanel from "./VisualPanel";
 
 export default function Professor() {
@@ -10,6 +13,10 @@ export default function Professor() {
   const token = getProfessorToken(code);
   const questions = store.useProfessorQuestions(session?._id, token);
   const counts = store.useFeedbackCounts(session?._id);
+  const suggestions = store.useProfessorSuggestions(session?._id, token);
+  const [chosenPreview, setChosenPreview] = useState<string | null>(null);
+  const [asking, setAsking] = useState<string | null>(null);
+  const [copilotError, setCopilotError] = useState<string | null>(null);
 
   if (session === undefined) return <main className="page">Loading…</main>;
   if (session === null) {
@@ -28,6 +35,22 @@ export default function Professor() {
       </main>
     );
   }
+
+  async function askCopilot(questionId: string) {
+    if (!session || !token) return;
+    setAsking(questionId);
+    setCopilotError(null);
+    try {
+      await store.askCopilot({ sessionId: session._id, token, questionId });
+    } catch (err) {
+      setCopilotError(errorMessage(err));
+    } finally {
+      setAsking(null);
+    }
+  }
+
+  const latestFor = (questionId: string): Suggestion | undefined =>
+    suggestions?.find((s) => s.questionId === questionId);
 
   const open = questions?.filter((q) => q.status === "open") ?? [];
   const answered = questions?.filter((q) => q.status === "answered") ?? [];
@@ -64,8 +87,11 @@ export default function Professor() {
               <li key={q._id}>
                 <p>{q.text}</p>
                 <div className="row">
-                  <button disabled title="Added with the Claude integration">
-                    Ask copilot
+                  <button
+                    disabled={asking !== null}
+                    onClick={() => askCopilot(q._id)}
+                  >
+                    {asking === q._id ? "Thinking…" : "Ask copilot"}
                   </button>
                   <button
                     className="secondary"
@@ -80,9 +106,16 @@ export default function Professor() {
                     Mark answered
                   </button>
                 </div>
+                {latestFor(q._id) && (
+                  <SuggestionCard
+                    suggestion={latestFor(q._id)!}
+                    onOpenPreview={setChosenPreview}
+                  />
+                )}
               </li>
             ))}
           </ul>
+          {copilotError && <p className="error">{copilotError}</p>}
           {answered.length > 0 && (
             <details>
               <summary>Answered ({answered.length})</summary>
@@ -98,9 +131,54 @@ export default function Professor() {
         </section>
 
         <section>
-          <VisualPanel sessionId={session._id} token={token} />
+          <VisualPanel
+            sessionId={session._id}
+            token={token}
+            chosenId={chosenPreview}
+            onChoose={setChosenPreview}
+          />
         </section>
       </div>
     </main>
+  );
+}
+
+function SuggestionCard({
+  suggestion,
+  onOpenPreview,
+}: {
+  suggestion: Suggestion;
+  onOpenPreview: (previewId: string) => void;
+}) {
+  return (
+    <div className="suggestion">
+      <p className="suggestion-head muted">
+        Private copilot suggestion
+        {suggestion.cached && <span className="pill cached">cached</span>}
+      </p>
+      <p>{suggestion.explanation}</p>
+      <p>
+        <strong>Try:</strong> {suggestion.teachingAction}
+      </p>
+      <p className="sources">
+        {suggestion.sourceIds.map((id) => (
+          <span key={id} className="chip" title={EXCERPTS[id]}>
+            {id}
+          </span>
+        ))}
+      </p>
+      {suggestion.previewId ? (
+        <button
+          className="secondary"
+          onClick={() => onOpenPreview(suggestion.previewId!)}
+        >
+          Show verified highlight in preview
+        </button>
+      ) : (
+        <p className="error">
+          Highlight not verified{suggestion.note ? `: ${suggestion.note}` : ""}
+        </p>
+      )}
+    </div>
   );
 }

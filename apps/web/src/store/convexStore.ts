@@ -11,6 +11,7 @@ export function useConvexStore(): SessionStore {
   const setVote = useMutation(api.feedback.set);
   const answer = useMutation(api.questions.markAnswered);
   const build = useAction(api.visuals.buildPreview);
+  const suggest = useAction(api.copilot.suggest);
   const publishPreview = useMutation(api.visuals.publish);
   const unpublishCurrent = useMutation(api.visuals.unpublish);
 
@@ -31,6 +32,11 @@ export function useConvexStore(): SessionStore {
         api.feedback.counts,
         sessionId ? { sessionId: sid(sessionId) } : "skip",
       ),
+    useProfessorSuggestions: (sessionId, token) =>
+      useQuery(
+        api.copilot.listForProfessor,
+        sessionId && token ? { sessionId: sid(sessionId), token } : "skip",
+      ),
     useCurrentVisual: (sessionId) =>
       useQuery(
         api.visuals.current,
@@ -49,6 +55,12 @@ export function useConvexStore(): SessionStore {
     setFeedback: async ({ sessionId, studentId, value }) => {
       await setVote({ sessionId: sid(sessionId), studentId, value });
     },
+    askCopilot: ({ sessionId, token, questionId }) =>
+      suggest({
+        sessionId: sid(sessionId),
+        token,
+        questionId: questionId as Id<"questions">,
+      }),
     buildPreview: ({ sessionId, token, query, groupId }) =>
       build({ sessionId: sid(sessionId), token, query, groupId }),
     publish: async ({ sessionId, token, previewId }) => {

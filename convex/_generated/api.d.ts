@@ -8,8 +8,12 @@
  * @module
  */
 
+import type * as ai_prompts from "../ai/prompts.js";
+import type * as copilot from "../copilot.js";
 import type * as feedback from "../feedback.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_chem from "../lib/chem.js";
+import type * as lib_lesson from "../lib/lesson.js";
 import type * as lib_visual from "../lib/visual.js";
 import type * as questions from "../questions.js";
 import type * as sessions from "../sessions.js";
@@ -22,8 +26,12 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "ai/prompts": typeof ai_prompts;
+  copilot: typeof copilot;
   feedback: typeof feedback;
   "lib/auth": typeof lib_auth;
+  "lib/chem": typeof lib_chem;
+  "lib/lesson": typeof lib_lesson;
   "lib/visual": typeof lib_visual;
   questions: typeof questions;
   sessions: typeof sessions;

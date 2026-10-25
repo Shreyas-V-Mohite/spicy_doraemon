@@ -84,3 +84,9 @@ select { font: inherit; padding: 10px; border-radius: 8px; border: 1px solid var
 .stage { flex: 1; display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 8px; padding: 12px; }
 .stage .viewer { height: 60vh; }
 .stage .caption { margin: 0; font-size: 1.2rem; text-align: center; }
+.suggestion { margin-top: 12px; padding: 12px; border-radius: 8px; border: 1px solid var(--accent); }
+.suggestion p { margin: 0 0 8px; }
+.suggestion-head { display: flex; gap: 8px; align-items: center; font-size: 0.8rem; }
+.sources { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font-size: 0.75rem; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); cursor: help; }
+.pill.cached { color: var(--confused); }

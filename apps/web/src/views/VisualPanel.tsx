@@ -7,17 +7,23 @@ import MoleculeView from "../viewer/MoleculeView";
 interface Props {
   sessionId: string;
   token: string;
+  chosenId: string | null;
+  onChoose: (previewId: string | null) => void;
 }
 
 // Private preview, then explicit publish. Students only ever see what is
 // published; previews live in a professor-only table.
-export default function VisualPanel({ sessionId, token }: Props) {
+export default function VisualPanel({
+  sessionId,
+  token,
+  chosenId,
+  onChoose,
+}: Props) {
   const store = useStore();
   const previews = store.useProfessorPreviews(sessionId, token);
   const published = store.useCurrentVisual(sessionId);
   const [molecule, setMolecule] = useState(DEMO_MOLECULES[1]);
   const [groupId, setGroupId] = useState("carboxylic_acid");
-  const [chosenId, setChosenId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,7 +35,7 @@ export default function VisualPanel({ sessionId, token }: Props) {
     setBusy(true);
     setError(null);
     try {
-      setChosenId(
+      onChoose(
         await store.buildPreview({ sessionId, token, query: molecule, groupId }),
       );
     } catch (err) {

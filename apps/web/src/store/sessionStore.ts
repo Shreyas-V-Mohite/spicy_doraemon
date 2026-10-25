@@ -5,6 +5,7 @@ import type {
   PublicSession,
   Preview,
   Question,
+  Suggestion,
   Visual,
 } from "../types";
 
@@ -22,6 +23,10 @@ export interface SessionStore {
     studentId: string,
   ): Question[] | undefined;
   useFeedbackCounts(sessionId: string | undefined): FeedbackCounts | undefined;
+  useProfessorSuggestions(
+    sessionId: string | undefined,
+    token: string | null,
+  ): Suggestion[] | undefined;
   // Public: the visual the professor has published, or null.
   useCurrentVisual(sessionId: string | undefined): Visual | null | undefined;
   useProfessorPreviews(
@@ -40,6 +45,11 @@ export interface SessionStore {
     studentId: string;
     value: FeedbackValue;
   }): Promise<void>;
+  askCopilot(args: {
+    sessionId: string;
+    token: string;
+    questionId: string;
+  }): Promise<string>;
   buildPreview(args: {
     sessionId: string;
     token: string;
