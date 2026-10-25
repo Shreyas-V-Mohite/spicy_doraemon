@@ -1,26 +1,29 @@
-// NOTE: You can remove this file. Declaring the shape
-// of the database is entirely optional in Convex.
-// See https://docs.convex.dev/database/schemas.
-
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
-export default defineSchema(
-  {
-    documents: defineTable({
-      fieldOne: v.string(),
-      fieldTwo: v.object({
-        subFieldOne: v.array(v.number()),
-      }),
-    }),
-  },
-  // If you ever get an error about schema mismatch
-  // between your data and your schema, and you cannot
-  // change the schema to match the current data in your database,
-  // you can:
-  //  1. Use the dashboard to delete tables or individual documents
-  //     that are causing the error.
-  //  2. Change this option to `false` and make changes to the data
-  //     freely, ignoring the schema. Don't forget to change back to `true`!
-  { schemaValidation: true }
-);
+export default defineSchema({
+  // Public fields are code and topic; tokenHash never leaves the server.
+  sessions: defineTable({
+    code: v.string(),
+    topic: v.string(),
+    tokenHash: v.string(),
+  }).index("by_code", ["code"]),
+
+  // studentId is a random id generated in the student's browser.
+  questions: defineTable({
+    sessionId: v.id("sessions"),
+    studentId: v.string(),
+    text: v.string(),
+    status: v.union(v.literal("open"), v.literal("answered")),
+  })
+    .index("by_session", ["sessionId"])
+    .index("by_session_and_student", ["sessionId", "studentId"]),
+
+  feedback: defineTable({
+    sessionId: v.id("sessions"),
+    studentId: v.string(),
+    value: v.union(v.literal("confused"), v.literal("understood")),
+  })
+    .index("by_session", ["sessionId"])
+    .index("by_session_and_student", ["sessionId", "studentId"]),
+});

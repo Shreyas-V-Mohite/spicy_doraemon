@@ -23,5 +23,8 @@
     "eslint": "^10.8.0",
     "globals": "^17.9.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2"
-  }
+  },
+  "workspaces": [
+    "apps/*"
+  ]
 }

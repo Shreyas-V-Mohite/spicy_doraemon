@@ -8,7 +8,10 @@
  * @module
  */
 
-import type * as myFunctions from "../myFunctions.js";
+import type * as feedback from "../feedback.js";
+import type * as lib_auth from "../lib/auth.js";
+import type * as questions from "../questions.js";
+import type * as sessions from "../sessions.js";
 
 import type {
   ApiFromModules,
@@ -17,7 +20,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  myFunctions: typeof myFunctions;
+  feedback: typeof feedback;
+  "lib/auth": typeof lib_auth;
+  questions: typeof questions;
+  sessions: typeof sessions;
 }>;
 
 /**
