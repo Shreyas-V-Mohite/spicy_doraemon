@@ -29,3 +29,6 @@ apps/web/public/mediapipe/
 
 # Teammate drop (an older repo copy plus the gesture lab); only packages/hand-gesture is used
 hand_gesture_module/
+
+.vercel
+.env*

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { TranscriberStatus } from "../transcribe/Transcriber";
 import type { TranscriptLine } from "../types";
+import Icon from "../ui/Icon";
 
 interface Props {
   status: TranscriberStatus;
@@ -44,40 +45,40 @@ export default function TranscriptPanel({
   }
 
   return (
-    <div className="stack">
-      <h2>Lecture transcript</h2>
-      <p className="muted">
-        Students can ask about what you say. Answers may quote this text, so fix
-        or delete anything the microphone got wrong.
-      </p>
+    <div className="transcript">
       {!supported ? (
-        <p className="error">This browser can't transcribe. Use Chrome.</p>
+        <p className="notice warn">
+          This browser can't transcribe speech. Open this page in Chrome to use it.
+        </p>
       ) : (
         <div className="row">
           {listening ? (
             <button className="secondary" onClick={onPause}>
-              Pause transcribing
+              Pause
             </button>
           ) : (
-            <button onClick={onStart}>Start transcribing</button>
+            <button onClick={onStart}>
+              <Icon name="mic" />
+              Start transcribing
+            </button>
           )}
           <span className={listening ? "live-dot on" : "live-dot"}>
             {listening ? "Listening" : status === "error" ? "Problem" : "Off"}
           </span>
         </div>
       )}
-      {detail && (
-        <p className={status === "listening" ? "muted" : "error"}>{detail}</p>
-      )}
+      <p className="muted small">
+        Students can ask about what you say. Answers may quote this text, so fix or delete
+        anything the microphone got wrong. Only text is kept, never audio.
+      </p>
+      {detail && <p className={listening ? "muted small" : "error"}>{detail}</p>}
       {error && <p className="error">{error}</p>}
-      {interim && <p className="muted">{interim}…</p>}
 
-      <ul className="list transcript">
+      <ul className="transcript-lines">
         {lines?.map((line) => (
           <li key={line._id}>
             {editing === line._id ? (
               <form
-                className="row"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void guard(async () => {
@@ -86,56 +87,64 @@ export default function TranscriptPanel({
                   });
                 }}
               >
-                <input
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  style={{ flex: 1 }}
-                  autoFocus
-                />
-                <button type="submit" disabled={!draft.trim()}>
+                <input value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus />
+                <button type="submit" className="sm" disabled={!draft.trim()}>
                   Save
                 </button>
-                <button type="button" className="secondary" onClick={() => setEditing(null)}>
+                <button type="button" className="ghost sm" onClick={() => setEditing(null)}>
                   Cancel
                 </button>
               </form>
             ) : (
               <>
-                <span>{line.text}</span>
-                <span className="row line-actions">
+                <span className="line-text">{line.text}</span>
+                <span className="line-actions">
                   <button
-                    className="secondary"
+                    className="ghost icon-only"
+                    title="Edit line"
+                    aria-label="Edit line"
                     onClick={() => {
                       setEditing(line._id);
                       setDraft(line.text);
                     }}
                   >
-                    Edit
+                    <Icon name="pencil" size={14} />
                   </button>
                   <button
-                    className="secondary"
+                    className="ghost danger icon-only"
+                    title="Delete line"
+                    aria-label="Delete line"
                     onClick={() => void guard(() => onDelete(line._id))}
                   >
-                    Delete
+                    <Icon name="trash" size={14} />
                   </button>
                 </span>
               </>
             )}
           </li>
         ))}
-        {lines && lines.length === 0 && (
-          <li className="muted">Nothing transcribed yet.</li>
-        )}
       </ul>
+      {interim && <p className="interim">{interim}...</p>}
+      {lines && lines.length === 0 && !interim && (
+        <div className="empty">
+          <div className="empty-icon">
+            <Icon name="mic" size={20} />
+          </div>
+          <strong>Nothing transcribed yet</strong>
+          <span>Start transcribing and your lecture appears here line by line.</span>
+        </div>
+      )}
       {lines && lines.length > 0 && (
         <button
-          className="secondary"
+          className="ghost danger sm"
+          style={{ alignSelf: "flex-start" }}
           onClick={() => {
             if (window.confirm("Delete this session's whole transcript?")) {
               void guard(onClear);
             }
           }}
         >
+          <Icon name="trash" size={14} />
           Delete whole transcript
         </button>
       )}

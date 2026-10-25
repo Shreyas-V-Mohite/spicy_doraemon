@@ -1,0 +1,4 @@
+# For hosts that read requirements.txt (Vercel). Keep in step with pyproject.toml.
+fastapi>=0.115
+pubchempy>=1.0.4
+rdkit>=2024.9

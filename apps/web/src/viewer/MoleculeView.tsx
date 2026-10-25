@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { GestureController } from "@spicy/hand-gesture";
 import type { MoleculeStyle } from "../types";
+import Icon from "../ui/Icon";
 import { ThreeDmolAdapter } from "./ThreeDmolAdapter";
 
 interface Props {
@@ -12,7 +13,15 @@ interface Props {
   controller?: GestureController | null;
   // Drawn behind the molecule, e.g. the professor's camera feed.
   backdrop?: ReactNode;
+  // Professor: called with the camera whenever it moves (polled, so hand
+  // gestures and the mouse both count). A new syncKey sends it again at once.
+  onViewChange?: (view: number[]) => void;
+  syncKey?: string | null;
+  // Student: a camera to follow, or null to keep their own.
+  followView?: readonly number[] | null;
 }
+
+const VIEW_POLL_MS = 150;
 
 // Rotate, zoom and pan come from 3Dmol's mouse and touch handling.
 export default function MoleculeView({
@@ -21,10 +30,18 @@ export default function MoleculeView({
   style = "ball-and-stick",
   controller = null,
   backdrop,
+  onViewChange,
+  syncKey = null,
+  followView = null,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const adapter = useRef<ThreeDmolAdapter | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  const onViewChangeRef = useRef(onViewChange);
+  useEffect(() => {
+    onViewChangeRef.current = onViewChange;
+  });
+  const sending = onViewChange !== undefined;
 
   useEffect(() => {
     const el = container.current;
@@ -65,6 +82,31 @@ export default function MoleculeView({
     adapter.current?.setHighlight(highlight);
   }, [highlight]);
 
+  // Follow another viewer's camera: jump on a new molecule, ease otherwise.
+  const followedSdf = useRef<string | null>(null);
+  useEffect(() => {
+    if (!followView) return;
+    const instant = followedSdf.current !== sdf;
+    followedSdf.current = sdf;
+    adapter.current?.followView(followView, instant);
+  }, [followView, sdf]);
+
+  // Report this camera while it moves. Polling catches every source of motion
+  // (mouse, touch, gesture easing) without hooking each one.
+  useEffect(() => {
+    if (!sending) return;
+    let last: string | null = null;
+    const timer = setInterval(() => {
+      const view = adapter.current?.getView();
+      if (!view) return;
+      const key = view.map((x) => x.toFixed(4)).join(",");
+      if (key === last) return;
+      last = key;
+      onViewChangeRef.current?.(view);
+    }, VIEW_POLL_MS);
+    return () => clearInterval(timer);
+  }, [sending, syncKey, sdf]);
+
   useEffect(() => {
     adapter.current?.setStyle(style);
   }, [style]);
@@ -80,16 +122,17 @@ export default function MoleculeView({
       {backdrop}
       <div ref={container} className="viewer" />
       {failed && (
-        <p className="error viewer-error">
-          3D view unavailable ({failed}). The highlight is still verified; check
-          that hardware acceleration/WebGL is on in this browser.
+        <p className="notice warn viewer-error">
+          3D view unavailable ({failed}). The highlight is still verified; check that
+          hardware acceleration (WebGL) is on in this browser.
         </p>
       )}
       <button
         type="button"
-        className="secondary reset"
+        className="secondary sm reset"
         onClick={() => adapter.current?.reset()}
       >
+        <Icon name="reset" size={14} />
         Reset view
       </button>
     </div>

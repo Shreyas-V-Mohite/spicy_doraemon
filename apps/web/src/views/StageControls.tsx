@@ -1,13 +1,15 @@
 import type { TrackingPhase } from "@spicy/hand-gesture";
 import type { DetectedGroup, MoleculeStyle } from "../types";
+import Icon from "../ui/Icon";
 
 export type MoleculeInput = { kind: "name" | "smiles"; value: string };
+export type ShareState = "nothing-loaded" | "not-shared" | "shared" | "different";
 
 const GESTURE_STATUS: Record<TrackingPhase, string> = {
   idle: "",
-  "loading-models": "Loading hand tracking…",
-  "requesting-camera": "Allow the camera when asked…",
-  running: "Hand tracking is on. Open and close your hand to resize, hold it still and turn it to rotate, point to move.",
+  "loading-models": "Loading hand tracking...",
+  "requesting-camera": "Allow the camera when your browser asks.",
+  running: "Open and close your hand to resize, hold it still and turn it to rotate, point to move.",
   error: "",
 };
 
@@ -28,14 +30,9 @@ interface Props {
   onGroup: (id: string | null) => void;
   style: MoleculeStyle;
   onStyle: (style: MoleculeStyle) => void;
-  // What the class currently sees, versus what is on this stage.
-  shareState: "nothing-loaded" | "not-shared" | "shared" | "different";
-  sharedCaption: string | null;
-  sharing: boolean;
-  onShare: () => void;
-  onUnshare: () => void;
   error: string | null;
-  gestures: {
+  // Shown only where the gestures toggle belongs with these controls.
+  gestures?: {
     on: boolean;
     phase: TrackingPhase;
     error: string | undefined;
@@ -55,77 +52,80 @@ export default function StageControls({
   onGroup,
   style,
   onStyle,
-  shareState,
-  sharedCaption,
-  sharing,
-  onShare,
-  onUnshare,
   error,
   gestures,
 }: Props) {
   return (
-    <div className="stack stage-controls">
+    <div className="mol-controls">
       <form
-        className="row"
+        className="mol-search"
         onSubmit={(e) => {
           e.preventDefault();
           onLoad(input);
         }}
       >
-        <select
-          value={input.kind}
-          onChange={(e) =>
-            onInput({ ...input, kind: e.target.value as "name" | "smiles" })
-          }
-          aria-label="Input type"
-        >
-          <option value="name">Name</option>
-          <option value="smiles">SMILES</option>
-        </select>
-        <input
-          value={input.value}
-          onChange={(e) => onInput({ ...input, value: e.target.value })}
-          placeholder={input.kind === "name" ? "e.g. aspirin" : "e.g. CC(=O)O"}
-          aria-label="Molecule"
-          style={{ flex: 1, minWidth: 140 }}
-        />
+        <div className="segmented" role="group" aria-label="Search by">
+          {(["name", "smiles"] as const).map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              className={input.kind === kind ? "active" : undefined}
+              onClick={() => onInput({ ...input, kind })}
+            >
+              {kind === "name" ? "Name" : "SMILES"}
+            </button>
+          ))}
+        </div>
+        <div className="search-field">
+          <Icon name="search" />
+          <input
+            value={input.value}
+            onChange={(e) => onInput({ ...input, value: e.target.value })}
+            placeholder={input.kind === "name" ? "Search a molecule, e.g. aspirin" : "Enter SMILES, e.g. CC(=O)O"}
+            aria-label="Molecule"
+            className={input.kind === "smiles" ? "mono" : undefined}
+            spellCheck={false}
+          />
+        </div>
         <button type="submit" disabled={loading || !input.value.trim()}>
-          {loading ? "Loading…" : "Load"}
+          {loading ? "Loading..." : "Load"}
         </button>
       </form>
-      <p className="row muted">
-        Try:
-        {EXAMPLES.map((name) => (
-          <button
-            key={name}
-            type="button"
-            className="chip-button"
-            disabled={loading}
-            onClick={() => onLoad({ kind: "name", value: name })}
-          >
-            {name}
-          </button>
-        ))}
-      </p>
 
-      {groups !== null && (
+      {groups === null ? (
         <div className="row">
+          <span className="control-label">Examples</span>
+          {EXAMPLES.map((name) => (
+            <button
+              key={name}
+              type="button"
+              className="chip"
+              disabled={loading}
+              onClick={() => onLoad({ kind: "name", value: name })}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="row">
+          <span className="control-label">Highlight</span>
           {groups.length === 0 ? (
-            <span className="muted">No supported functional groups found.</span>
+            <span className="muted small">No supported functional groups in this molecule.</span>
           ) : (
             <>
               <button
                 type="button"
-                className={groupId === null ? "chip-button active" : "chip-button"}
+                className={groupId === null ? "chip active" : "chip"}
                 onClick={() => onGroup(null)}
               >
-                No highlight
+                None
               </button>
               {groups.map((g) => (
                 <button
                   key={g.id}
                   type="button"
-                  className={groupId === g.id ? "chip-button active" : "chip-button"}
+                  className={groupId === g.id ? "chip active" : "chip"}
                   onClick={() => onGroup(g.id)}
                 >
                   {g.label}
@@ -137,44 +137,82 @@ export default function StageControls({
       )}
 
       <div className="row">
-        <select
-          value={style}
-          onChange={(e) => onStyle(e.target.value as MoleculeStyle)}
-          aria-label="Display style"
-        >
+        <span className="control-label">Display</span>
+        <div className="segmented" role="group" aria-label="Display style">
           {STYLES.map((s) => (
-            <option key={s.id} value={s.id}>
+            <button
+              key={s.id}
+              type="button"
+              className={style === s.id ? "active" : undefined}
+              onClick={() => onStyle(s.id)}
+            >
               {s.label}
-            </option>
+            </button>
           ))}
-        </select>
-        <button
-          onClick={onShare}
-          disabled={sharing || shareState === "nothing-loaded" || shareState === "shared"}
-        >
-          {sharing ? "Sharing…" : shareState === "shared" ? "Shared with class" : "Share molecule"}
-        </button>
-        {sharedCaption && (
-          <button className="secondary" onClick={onUnshare} disabled={sharing}>
-            Stop sharing
-          </button>
+        </div>
+        {gestures && (
+          <>
+            <span className="spacer" />
+            <button
+              type="button"
+              className={gestures.on ? "sm" : "secondary sm"}
+              onClick={gestures.onToggle}
+              title="Control the molecule with your hand, in front of your camera"
+            >
+              <Icon name="video" />
+              {gestures.on ? "Hand gestures on" : "Hand gestures"}
+            </button>
+          </>
         )}
       </div>
-      <div className="row">
-        <button
-          className={gestures.on ? undefined : "secondary"}
-          onClick={gestures.onToggle}
-          title="Control the molecule with your hand, in front of your camera"
-        >
-          {gestures.on ? "Gestures on" : "Use hand gestures"}
-        </button>
-        {gestures.on && <span className="muted">{GESTURE_STATUS[gestures.phase]}</span>}
-      </div>
-      {gestures.error && <p className="error">{gestures.error}</p>}
-      {sharedCaption && shareState === "different" && (
-        <p className="muted">Students are seeing: {sharedCaption}</p>
+      {gestures?.on && GESTURE_STATUS[gestures.phase] && (
+        <p className="notice accent">{GESTURE_STATUS[gestures.phase]}</p>
       )}
+      {gestures?.error && <p className="error">{gestures.error}</p>}
       {error && <p className="error">{error}</p>}
+    </div>
+  );
+}
+
+// Below the viewer: put what is on the professor's stage on every student's screen.
+export function ShareBar({
+  shareState,
+  sharedCaption,
+  sharing,
+  onShare,
+  onUnshare,
+}: {
+  shareState: ShareState;
+  sharedCaption: string | null;
+  sharing: boolean;
+  onShare: () => void;
+  onUnshare: () => void;
+}) {
+  if (shareState === "nothing-loaded" && !sharedCaption) return null;
+  return (
+    <div className="share-row">
+      {shareState !== "nothing-loaded" && (
+        <button onClick={onShare} disabled={sharing || shareState === "shared"}>
+          {shareState === "shared" ? <Icon name="check" /> : <Icon name="send" />}
+          {sharing
+            ? "Sharing..."
+            : shareState === "shared"
+              ? "On students' screens"
+              : shareState === "different"
+                ? "Update students' screens"
+                : "Share with class"}
+        </button>
+      )}
+      {sharedCaption && (
+        <button className="secondary" onClick={onUnshare} disabled={sharing}>
+          Stop sharing
+        </button>
+      )}
+      {sharedCaption && shareState !== "shared" && (
+        <span className="muted small">
+          Students now see: <strong style={{ textTransform: "capitalize" }}>{sharedCaption}</strong>
+        </span>
+      )}
     </div>
   );
 }

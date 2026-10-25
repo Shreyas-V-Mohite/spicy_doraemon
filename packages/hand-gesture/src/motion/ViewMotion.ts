@@ -39,6 +39,8 @@ export interface MotionOptions {
   fitMargin: number;
   /** At the smallest size the molecule still spans this fraction of the screen's shorter side. */
   minSizeFraction: number;
+  /** At the largest size the molecule may span this many screens (1 = just fits). */
+  maxFill: number;
   /** Run the easing loop on requestAnimationFrame. Tests turn this off and call step(). */
   autoTick: boolean;
 }
@@ -47,6 +49,7 @@ const DEFAULTS: MotionOptions = {
   commandSmoothingMs: 45,
   fitMargin: 0.08,
   minSizeFraction: 0.1,
+  maxFill: 1,
   autoTick: true,
 };
 
@@ -152,7 +155,7 @@ export class ViewMotion {
     // Half the shorter side of the screen, per unit of camera distance.
     const halfSide = Math.tan((FOV_DEG * Math.PI) / 360) * Math.min(1, w / h);
     return {
-      minDistance: r / ((1 - this.opts.fitMargin) * halfSide),
+      minDistance: r / ((1 - this.opts.fitMargin) * this.opts.maxFill * halfSide),
       maxDistance: r / (this.opts.minSizeFraction * halfSide),
     };
   }

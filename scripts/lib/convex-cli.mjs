@@ -5,8 +5,11 @@ import { fileURLToPath } from 'node:url';
 
 export const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
+// Run the CLI with node directly: `npx` is `npx.cmd` on Windows, which execFileSync can't start.
+export const convexBin = join(root, 'node_modules', 'convex', 'bin', 'main.js');
+
 function once(args) {
-  return execFileSync('npx', ['convex', ...args], {
+  return execFileSync(process.execPath, [convexBin, ...args], {
     cwd: root,
     stdio: ['ignore', 'pipe', 'pipe'],
     encoding: 'utf8',

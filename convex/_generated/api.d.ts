@@ -23,11 +23,13 @@ import type * as lib_embed from "../lib/embed.js";
 import type * as lib_quotes from "../lib/quotes.js";
 import type * as lib_verify from "../lib/verify.js";
 import type * as lib_visual from "../lib/visual.js";
+import type * as live from "../live.js";
 import type * as memory from "../memory.js";
 import type * as questions from "../questions.js";
 import type * as retrieval from "../retrieval.js";
 import type * as sessions from "../sessions.js";
 import type * as sharing from "../sharing.js";
+import type * as slideAi from "../slideAi.js";
 import type * as transcript from "../transcript.js";
 import type * as visuals from "../visuals.js";
 
@@ -53,11 +55,13 @@ declare const fullApi: ApiFromModules<{
   "lib/quotes": typeof lib_quotes;
   "lib/verify": typeof lib_verify;
   "lib/visual": typeof lib_visual;
+  live: typeof live;
   memory: typeof memory;
   questions: typeof questions;
   retrieval: typeof retrieval;
   sessions: typeof sessions;
   sharing: typeof sharing;
+  slideAi: typeof slideAi;
   transcript: typeof transcript;
   visuals: typeof visuals;
 }>;

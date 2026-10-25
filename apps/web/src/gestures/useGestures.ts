@@ -2,8 +2,22 @@ import { useEffect, useState } from "react";
 import {
   HandGestureController,
   MediaPipeHandLandmarker,
+  type HandGestureControllerOptions,
   type TrackingPhase,
 } from "@spicy/hand-gesture";
+
+// Going from rotating back to resizing was too hard in class: the package
+// wants a full open-to-fist squeeze in 0.8 s with the palm held as when the
+// turn began. Accept a shorter squeeze over a longer window and a more tilted
+// palm, and let a hand dropped out of view for a moment start fresh.
+const MAPPER: HandGestureControllerOptions["mapper"] = {
+  resumeZoomLow: 0.35,
+  resumeZoomHigh: 0.65,
+  resumeZoomWindowMs: 1300,
+  facingMaxDeg: 75,
+  minModeDwellMs: 300,
+  rotateKeepAfterLostMs: 600,
+};
 
 export interface GestureState {
   // Present only while gestures are on; hand it to the stage.
@@ -23,6 +37,7 @@ export function useGestures(enabled: boolean): GestureState {
     if (!enabled) return;
     const c = new HandGestureController({
       landmarker: new MediaPipeHandLandmarker({ delegate: "GPU" }),
+      mapper: MAPPER,
     });
     setController(c);
     const off = c.subscribeSnapshots((s) => {

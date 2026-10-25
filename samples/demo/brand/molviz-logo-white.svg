@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 120 32" fill="none">
+  
+  <rect width="32" height="32" rx="8" fill="#0d7a6f"/>
+  <path d="M9 10.5 16 15.5 23 10.5M16 15.5V23.5" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="9" cy="10.5" r="3" fill="#ffffff"/>
+  <circle cx="23" cy="10.5" r="3" fill="#ffffff"/>
+  <circle cx="16" cy="23.5" r="3" fill="#ffffff"/>
+  <circle cx="16" cy="15.5" r="3.6" fill="#7ee0d3" stroke="#ffffff" stroke-width="1.6"/>
+  <text x="41" y="24.2" font-family="Geist, 'Segoe UI', Arial, sans-serif" font-weight="700" font-size="24" letter-spacing="-0.6" fill="#ffffff">Mol<tspan fill="#7ee0d3">Viz</tspan></text>
+</svg>

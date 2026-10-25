@@ -28,8 +28,23 @@ export function useConvexStore(): SessionStore {
   const load = useAction(api.visuals.load);
   const share = useAction(api.visuals.share);
   const unshare = useMutation(api.visuals.unshare);
+  const sendView = useMutation(api.visuals.setView);
   const shareQa = useMutation(api.sharing.shareAnswer);
   const stopQa = useMutation(api.sharing.stopSharingAnswer);
+  const slidesUploadUrl = useMutation(api.live.generateSlidesUploadUrl);
+  const attachSlides = useMutation(api.live.attachSlides);
+  const gotoSlide = useMutation(api.live.setSlide);
+  const stageMode = useMutation(api.live.setStageMode);
+  const handMode = useMutation(api.live.setHandMode);
+  const onAir = useMutation(api.live.setBroadcasting);
+  const signal = useMutation(api.live.sendSignal);
+  const ack = useMutation(api.live.ackSignals);
+  const ice = useAction(api.live.iceServers);
+  const askRelay = useMutation(api.live.requestRelay);
+  const sendRelay = useMutation(api.live.pushRelay);
+  const detect = useAction(api.slideAi.detect);
+  const escalate = useMutation(api.questions.escalate);
+  const reply = useMutation(api.questions.reply);
 
   return {
     useSession: (code) => useQuery(api.sessions.getByCode, { code }),
@@ -91,6 +106,32 @@ export function useConvexStore(): SessionStore {
         api.visuals.current,
         sessionId ? { sessionId: sid(sessionId) } : "skip",
       ),
+    useStageView: (sessionId) =>
+      useQuery(
+        api.visuals.currentView,
+        sessionId ? { sessionId: sid(sessionId) } : "skip",
+      ),
+    useSlidesUrl: (sessionId) =>
+      useQuery(api.live.slidesUrl, sessionId ? { sessionId: sid(sessionId) } : "skip"),
+    useSlideFeedback: (sessionId, token) =>
+      useQuery(
+        api.feedback.bySlide,
+        sessionId && token ? { sessionId: sid(sessionId), token } : "skip",
+      ),
+    useSignals: (sessionId, me, token) =>
+      useQuery(
+        api.live.inbox,
+        sessionId && (me !== "professor" || token)
+          ? { sessionId: sid(sessionId), me, token: token ?? undefined }
+          : "skip",
+      ),
+    useSlideMolecules: (sessionId, token) =>
+      useQuery(
+        api.slideAi.list,
+        sessionId && token ? { sessionId: sid(sessionId), token } : "skip",
+      ),
+    useRelay: (sessionId, kind, active) =>
+      useQuery(api.live.relay, sessionId && active ? { sessionId: sid(sessionId), kind } : "skip"),
     useSharedAnswer: (sessionId) =>
       useQuery(
         api.sharing.currentAnswer,
@@ -130,11 +171,14 @@ export function useConvexStore(): SessionStore {
     },
     loadMolecule: ({ sessionId, token, kind, value }) =>
       load({ sessionId: sid(sessionId), token, kind, value }),
-    shareMolecule: async ({ sessionId, token, kind, value, groupId, style }) => {
-      await share({ sessionId: sid(sessionId), token, kind, value, groupId, style });
+    shareMolecule: async ({ sessionId, token, kind, value, groupId, style, toStage }) => {
+      await share({ sessionId: sid(sessionId), token, kind, value, groupId, style, toStage });
     },
     unshareMolecule: async ({ sessionId, token }) => {
       await unshare({ sessionId: sid(sessionId), token });
+    },
+    setStageView: async ({ sessionId, token, view }) => {
+      await sendView({ sessionId: sid(sessionId), token, view });
     },
     shareAnswer: async ({ sessionId, token, questionId }) => {
       await shareQa({
@@ -196,6 +240,56 @@ export function useConvexStore(): SessionStore {
         token,
         questionId: questionId as Id<"questions">,
       });
+    },
+    escalateQuestion: async ({ sessionId, questionId, ...rest }) => {
+      await escalate({ sessionId: sid(sessionId), questionId: questionId as Id<"questions">, ...rest });
+    },
+    replyToQuestion: async ({ sessionId, questionId, ...rest }) => {
+      await reply({ sessionId: sid(sessionId), questionId: questionId as Id<"questions">, ...rest });
+    },
+    uploadSlides: async ({ sessionId, token, file, slideCount }) => {
+      const url = await slidesUploadUrl({ sessionId: sid(sessionId), token });
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/pdf" },
+        body: file,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      const { storageId } = (await res.json()) as { storageId: string };
+      await attachSlides({
+        sessionId: sid(sessionId),
+        token,
+        fileId: storageId as Id<"_storage">,
+        slideCount,
+      });
+    },
+    setSlide: async ({ sessionId, token, slideIndex }) => {
+      await gotoSlide({ sessionId: sid(sessionId), token, slideIndex });
+    },
+    setStageMode: async ({ sessionId, token, stageMode: mode }) => {
+      await stageMode({ sessionId: sid(sessionId), token, stageMode: mode });
+    },
+    setHandMode: async ({ sessionId, token, on }) => {
+      await handMode({ sessionId: sid(sessionId), token, on });
+    },
+    setBroadcasting: async ({ sessionId, token, on }) => {
+      await onAir({ sessionId: sid(sessionId), token, on });
+    },
+    sendSignal: async ({ sessionId, ...rest }) => {
+      await signal({ sessionId: sid(sessionId), ...rest });
+    },
+    ackSignals: async ({ sessionId, ids, ...rest }) => {
+      await ack({ sessionId: sid(sessionId), ids: ids as Id<"rtcSignals">[], ...rest });
+    },
+    getIceServers: async () => (await ice({})) as RTCIceServer[],
+    requestRelay: async ({ sessionId }) => {
+      await askRelay({ sessionId: sid(sessionId) });
+    },
+    pushRelay: async ({ sessionId, ...rest }) => {
+      await sendRelay({ sessionId: sid(sessionId), ...rest });
+    },
+    detectSlideMolecules: async ({ sessionId, ...rest }) => {
+      await detect({ sessionId: sid(sessionId), ...rest });
     },
   };
 }

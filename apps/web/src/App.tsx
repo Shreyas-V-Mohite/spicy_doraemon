@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import { StoreContext } from "./store/sessionStore";
 import { useConvexStore } from "./store/convexStore";
 import ErrorBoundary from "./ErrorBoundary";
@@ -7,6 +7,7 @@ import ProfessorStart from "./views/ProfessorStart";
 import CoursePage from "./views/CoursePage";
 import Professor from "./views/Professor";
 import Student from "./views/Student";
+import Presenter from "./views/Presenter";
 
 export default function App() {
   const store = useConvexStore();
@@ -19,16 +20,10 @@ export default function App() {
         <Route path="/professor/course/:courseId" element={<CoursePage />} />
         <Route path="/professor/:code" element={<Professor />} />
         <Route path="/s/:code" element={<Student />} />
-        <Route path="/present/:code" element={<PresentRedirect />} />
+        <Route path="/present/:code" element={<Presenter />} />
         <Route path="*" element={<Home />} />
       </Routes>
       </ErrorBoundary>
     </StoreContext.Provider>
   );
-}
-
-// The presentation view is now Present mode on the professor page.
-function PresentRedirect() {
-  const { code = "" } = useParams();
-  return <Navigate to={`/professor/${code}`} replace />;
 }

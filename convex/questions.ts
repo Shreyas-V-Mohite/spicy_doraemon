@@ -15,7 +15,8 @@ export const submit = mutation({
     if (text.length === 0 || text.length > 500) {
       throw new ConvexError("Question must be 1-500 characters");
     }
-    if (!(await ctx.db.get(args.sessionId))) {
+    const session = await ctx.db.get(args.sessionId);
+    if (!session) {
       throw new ConvexError("Session not found");
     }
     const mine = await ctx.db
@@ -47,6 +48,7 @@ export const submit = mutation({
       studentId: args.studentId,
       text,
       status: "open",
+      slideIndex: session.slidesFileId ? session.slideIndex : undefined,
     });
     const answerId = await ctx.db.insert("answers", {
       sessionId: args.sessionId,
@@ -102,6 +104,10 @@ export const queue = query({
           text: q.text,
           status: q.status,
           _creationTime: q._creationTime,
+          slideIndex: q.slideIndex ?? null,
+          escalated: q.escalatedAt !== undefined,
+          escalationNote: q.escalationNote ?? null,
+          professorReply: q.professorReply ?? null,
           answerStatus: a?.status ?? null,
           answerNote: a?.note ?? null,
           answerText: a?.text ?? null,
@@ -116,7 +122,7 @@ export const queue = query({
         studentCount: new Set(members.map((m) => m.studentId)).size,
         open: open.length > 0,
         flagged: open.some(
-          (r) => FLAGGED.has(r.answerStatus ?? "") || r.answerConflict,
+          (r) => FLAGGED.has(r.answerStatus ?? "") || r.answerConflict || r.escalated,
         ),
         latest: members[0]._creationTime,
         members: rows,
@@ -165,6 +171,8 @@ export const listMine = query({
           text: q.text,
           status: q.status,
           similarCount,
+          escalated: q.escalatedAt !== undefined,
+          professorReply: q.professorReply ?? null,
           answer: answer
             ? {
                 status: answer.status,
@@ -194,6 +202,59 @@ export const markAnswered = mutation({
       throw new ConvexError("Question not found");
     }
     await ctx.db.patch(args.questionId, { status: "answered" });
+  },
+});
+
+// The student read the AI's answer and still wants the professor: the
+// question goes back to the top of the professor's queue as "needs you".
+export const escalate = mutation({
+  args: {
+    sessionId: v.id("sessions"),
+    studentId: v.string(),
+    questionId: v.id("questions"),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const question = await ctx.db.get(args.questionId);
+    // Only the student who asked can send it on.
+    if (
+      question === null ||
+      question.sessionId !== args.sessionId ||
+      question.studentId !== args.studentId
+    ) {
+      throw new ConvexError("Question not found");
+    }
+    if (question.escalatedAt !== undefined) return null;
+    const note = args.note?.trim().slice(0, 500) || undefined;
+    await ctx.db.patch("questions", args.questionId, {
+      status: "open",
+      escalatedAt: Date.now(),
+      escalationNote: note,
+    });
+    return null;
+  },
+});
+
+// The professor answers one student directly; only that student sees it.
+export const reply = mutation({
+  args: {
+    sessionId: v.id("sessions"),
+    token: v.string(),
+    questionId: v.id("questions"),
+    text: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireProfessor(ctx, args.sessionId, args.token);
+    const question = await ctx.db.get(args.questionId);
+    if (question === null || question.sessionId !== args.sessionId) {
+      throw new ConvexError("Question not found");
+    }
+    const text = args.text.trim();
+    if (text.length === 0 || text.length > 2000) {
+      throw new ConvexError("Reply must be 1-2000 characters");
+    }
+    await ctx.db.patch("questions", args.questionId, { professorReply: text, status: "answered" });
+    return null;
   },
 });
 

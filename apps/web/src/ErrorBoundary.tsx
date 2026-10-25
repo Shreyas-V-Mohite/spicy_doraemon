@@ -14,9 +14,12 @@ export default class ErrorBoundary extends Component<
   render() {
     if (this.state.error) {
       return (
-        <main className="page">
-          <p className="error">Something broke: {this.state.error.message}</p>
-          <button onClick={() => this.setState({ error: null })}>Try again</button>
+        <main className="auth-wrap">
+          <div className="card auth-card stack">
+            <h1>Something went wrong</h1>
+            <p className="muted">{this.state.error.message}</p>
+            <button onClick={() => this.setState({ error: null })}>Try again</button>
+          </div>
         </main>
       );
     }

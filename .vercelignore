@@ -1,0 +1,13 @@
+# Only the web app (and the Convex API types it imports) is built on Vercel.
+node_modules
+**/node_modules
+.env
+.env.*
+**/.env.local
+apps/web/dist
+apps/web/public/models
+apps/web/public/mediapipe
+services
+hand_gesture_module
+.claude
+.agents

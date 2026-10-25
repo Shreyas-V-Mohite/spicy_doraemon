@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useStore } from "../store/sessionStore";
 import { errorMessage, saveCourseToken } from "../lib/identity";
+import AppHeader from "../ui/AppHeader";
+import Icon from "../ui/Icon";
 
 // Passcode in, then pick a course or create one. The passcode lives only in
 // this component's state; what the browser keeps is a per-course token.
@@ -48,64 +50,114 @@ export default function ProfessorStart() {
 
   if (passcode === null || courses === null) {
     return (
-      <main className="page narrow">
-        <h1>Professor sign-in</h1>
-        <form
-          className="stack"
-          onSubmit={(e) => {
-            e.preventDefault();
-            setPasscode(entered);
-          }}
-        >
-          <label>
-            Professor passcode
-            <input
-              type="password"
-              value={entered}
-              onChange={(e) => setEntered(e.target.value)}
-              autoFocus
-            />
-          </label>
-          {courses === null && <p className="error">Wrong passcode</p>}
-          <button type="submit" disabled={!entered}>
-            Continue
-          </button>
-        </form>
-      </main>
+      <>
+        <AppHeader>
+          <Link to="/" className="btn secondary sm">
+            Join as student
+          </Link>
+        </AppHeader>
+        <main className="auth-wrap">
+          <div className="card auth-card">
+            <div className="auth-icon">
+              <Icon name="lock" size={20} />
+            </div>
+            <h1>Instructor sign-in</h1>
+            <p className="muted" style={{ marginTop: 6 }}>
+              Enter your passcode to manage courses and run live sessions.
+            </p>
+            <form
+              className="stack"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setPasscode(entered);
+              }}
+            >
+              <label className="field">
+                Passcode
+                <input
+                  type="password"
+                  value={entered}
+                  onChange={(e) => setEntered(e.target.value)}
+                  autoFocus
+                  autoComplete="current-password"
+                />
+              </label>
+              {courses === null && (
+                <p className="error">That passcode isn't right. Try again.</p>
+              )}
+              <button type="submit" className="lg block" disabled={!entered}>
+                Continue
+              </button>
+            </form>
+          </div>
+        </main>
+      </>
     );
   }
 
   return (
-    <main className="page narrow">
-      <h1>Your courses</h1>
-      {courses === undefined && <p className="muted">Loading…</p>}
-      {courses && courses.length === 0 && (
-        <p className="muted">No courses yet. Create your first one below.</p>
-      )}
-      <ul className="list">
-        {courses?.map((c) => (
-          <li key={c._id} className="row">
-            <span style={{ flex: 1 }}>{c.name}</span>
-            <button disabled={busy} onClick={() => open(c._id)}>
-              Open
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      <h2>New course</h2>
-      <form onSubmit={createCourse} className="stack">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Organic Chemistry 101"
-          aria-label="Course name"
-        />
-        {error && <p className="error">{error}</p>}
-        <button type="submit" disabled={busy || !name.trim()}>
-          Create course
+    <>
+      <AppHeader>
+        <button className="ghost sm" onClick={() => setPasscode(null)}>
+          Sign out
         </button>
-      </form>
-    </main>
+      </AppHeader>
+      <main className="container">
+        <div className="page-head">
+          <div>
+            <span className="eyebrow">Instructor</span>
+            <h1 style={{ marginTop: 6 }}>Your courses</h1>
+            <p className="muted">
+              Open a course to manage its lessons or start a live session.
+            </p>
+          </div>
+        </div>
+
+        {courses === undefined && <p className="muted">Loading courses...</p>}
+        {error && (
+          <p className="error" style={{ marginBottom: 16 }}>
+            {error}
+          </p>
+        )}
+
+        <div className="course-grid">
+          {courses?.map((c) => (
+            <button
+              key={c._id}
+              className="course-tile"
+              disabled={busy}
+              onClick={() => open(c._id)}
+            >
+              <span className="tile-icon">
+                <Icon name="book" size={18} />
+              </span>
+              <span className="tile-name">{c.name}</span>
+              <span className="tile-foot">
+                Open course
+                <Icon name="arrow-right" />
+              </span>
+            </button>
+          ))}
+
+          <div className="course-tile new">
+            <span className="tile-icon">
+              <Icon name="plus" size={18} />
+            </span>
+            <span className="tile-name">New course</span>
+            <form onSubmit={createCourse}>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Organic Chemistry 101"
+                aria-label="Course name"
+              />
+              <button type="submit" disabled={busy || !name.trim()}>
+                Create course
+              </button>
+            </form>
+          </div>
+        </div>
+      </main>
+    </>
   );
 }

@@ -49,6 +49,9 @@ def fetch_sdf(query: str) -> tuple[int, str]:
     if not sdf:
         raise MoleculeNotFound(f"{query} has no 3D record")
 
-    CACHE_DIR.mkdir(exist_ok=True)
-    path.write_text(json.dumps({"cid": cid, "sdf": sdf}))
+    try:
+        CACHE_DIR.mkdir(exist_ok=True)
+        path.write_text(json.dumps({"cid": cid, "sdf": sdf}))
+    except OSError:
+        pass  # read-only hosts (serverless): skip caching, the answer is still good
     return cid, sdf

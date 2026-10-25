@@ -15,7 +15,7 @@ if ! curl -sf -m 3 "http://localhost:${PORT}/health" >/dev/null; then
   exit 1
 fi
 
-LOG="$(mktemp -t spicy-tunnel)"
+LOG="$(mktemp -t spicy-tunnel.XXXXXX)"
 cloudflared tunnel --url "http://localhost:${PORT}" >"$LOG" 2>&1 &
 TUNNEL_PID=$!
 trap 'kill "$TUNNEL_PID" 2>/dev/null || true' EXIT

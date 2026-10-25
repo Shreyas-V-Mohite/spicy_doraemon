@@ -4,6 +4,41 @@ export interface PublicSession {
   topic: string;
   courseId?: string;
   transcribing?: boolean;
+  // The live room.
+  hasSlides: boolean;
+  slideCount: number;
+  slideIndex: number;
+  stageMode: "slides" | "molecule";
+  broadcasting: boolean;
+  liveEpoch: number;
+  handMode: boolean;
+  // While > now, a student needs the relayed (Convex) camera feed.
+  relayUntil: number;
+}
+
+export interface SlideMolecules {
+  slideIndex: number;
+  molecules: { name: string; smiles: string }[];
+}
+
+export interface RelayChunk {
+  seq: number;
+  data: ArrayBuffer;
+}
+
+export interface SlideFeedback {
+  slideIndex: number;
+  confused: number;
+  understood: number;
+}
+
+export type SignalKind = "join" | "offer" | "answer" | "ice" | "leave";
+
+export interface Signal {
+  _id: string;
+  from: string;
+  kind: SignalKind;
+  payload: string;
 }
 
 export type AnswerStatus =
@@ -19,6 +54,11 @@ export interface Question {
   text: string;
   status: "open" | "answered";
   _creationTime: number;
+  slideIndex: number | null;
+  // The student asked for the professor after reading the AI answer.
+  escalated: boolean;
+  escalationNote: string | null;
+  professorReply: string | null;
   answerStatus: AnswerStatus | null;
   answerNote: string | null;
   answerText: string | null;
@@ -45,6 +85,8 @@ export interface MyQuestion {
   _creationTime: number;
   // Other students who asked something similar (a count only).
   similarCount: number;
+  escalated: boolean;
+  professorReply: string | null;
   answer: {
     status: AnswerStatus;
     text: string | null;

@@ -21,7 +21,8 @@ const warn = (msg) => console.log(`  ! ${msg}`);
 
 function convexEnv(name) {
   try {
-    const out = execFileSync('npx', ['convex', 'env', 'get', name], {
+    // node + the CLI script directly: `npx` is `npx.cmd` on Windows, which execFileSync can't start.
+    const out = execFileSync(process.execPath, [join(root, 'node_modules', 'convex', 'bin', 'main.js'), 'env', 'get', name], {
       cwd: root,
       stdio: ['ignore', 'pipe', 'ignore'],
       encoding: 'utf8',

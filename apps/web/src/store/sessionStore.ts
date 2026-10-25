@@ -12,6 +12,11 @@ import type {
   SharedAnswer,
   TranscriptLine,
   QueueCard,
+  Signal,
+  SignalKind,
+  SlideFeedback,
+  SlideMolecules,
+  RelayChunk,
   Visual,
 } from "../types";
 
@@ -39,7 +44,32 @@ export interface SessionStore {
   ): TranscriptLine[] | undefined;
   // Public: the visual the professor has published, or null.
   useCurrentVisual(sessionId: string | undefined): Visual | null | undefined;
+  // Public: the professor's camera on the shared molecule, or null.
+  useStageView(sessionId: string | undefined): number[] | null | undefined;
   useSharedAnswer(sessionId: string | undefined): SharedAnswer | null | undefined;
+  // The live room.
+  useSlidesUrl(sessionId: string | undefined): string | null | undefined;
+  useSlideFeedback(
+    sessionId: string | undefined,
+    token: string | null,
+  ): SlideFeedback[] | undefined;
+  // Signals waiting for `me` ("professor" needs the token).
+  useSignals(
+    sessionId: string | undefined,
+    me: string,
+    token: string | null,
+  ): Signal[] | undefined;
+  // Professor only: molecules Claude found on each slide.
+  useSlideMolecules(
+    sessionId: string | undefined,
+    token: string | null,
+  ): SlideMolecules[] | undefined;
+  // Public: the latest relayed camera frame / audio chunk (fallback path).
+  useRelay(
+    sessionId: string | undefined,
+    kind: "video" | "audio",
+    active: boolean,
+  ): RelayChunk | null | undefined;
 
   // null means the passcode was wrong.
   useCourses(passcode: string | null): Course[] | null | undefined;
@@ -113,8 +143,11 @@ export interface SessionStore {
     value: string;
     groupId?: string;
     style: MoleculeStyle;
+    // false: show it beside the slides without switching the stage to 3D.
+    toStage?: boolean;
   }): Promise<void>;
   unshareMolecule(args: { sessionId: string; token: string }): Promise<void>;
+  setStageView(args: { sessionId: string; token: string; view: number[] }): Promise<void>;
   shareAnswer(args: {
     sessionId: string;
     token: string;
@@ -159,6 +192,64 @@ export interface SessionStore {
     sessionId: string;
     token: string;
     questionId: string;
+  }): Promise<void>;
+  // The student still wants the professor after the AI answer.
+  escalateQuestion(args: {
+    sessionId: string;
+    studentId: string;
+    questionId: string;
+    note?: string;
+  }): Promise<void>;
+  replyToQuestion(args: {
+    sessionId: string;
+    token: string;
+    questionId: string;
+    text: string;
+  }): Promise<void>;
+  // Uploads a PDF deck and puts it on the session.
+  uploadSlides(args: {
+    sessionId: string;
+    token: string;
+    file: File;
+    slideCount: number;
+  }): Promise<void>;
+  setSlide(args: { sessionId: string; token: string; slideIndex: number }): Promise<void>;
+  setStageMode(args: {
+    sessionId: string;
+    token: string;
+    stageMode: "slides" | "molecule";
+  }): Promise<void>;
+  setHandMode(args: { sessionId: string; token: string; on: boolean }): Promise<void>;
+  setBroadcasting(args: { sessionId: string; token: string; on: boolean }): Promise<void>;
+  sendSignal(args: {
+    sessionId: string;
+    from: string;
+    to: string;
+    kind: SignalKind;
+    payload: string;
+    token?: string;
+  }): Promise<void>;
+  ackSignals(args: {
+    sessionId: string;
+    me: string;
+    token?: string;
+    ids: string[];
+  }): Promise<void>;
+  getIceServers(): Promise<RTCIceServer[]>;
+  requestRelay(args: { sessionId: string }): Promise<void>;
+  pushRelay(args: {
+    sessionId: string;
+    token: string;
+    kind: "video" | "audio";
+    seq: number;
+    data: ArrayBuffer;
+  }): Promise<void>;
+  detectSlideMolecules(args: {
+    sessionId: string;
+    token: string;
+    slideIndex: number;
+    image: string;
+    text: string;
   }): Promise<void>;
 }
 

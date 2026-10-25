@@ -73,6 +73,14 @@ export const getByCode = query({
       topic: session.topic,
       courseId: session.courseId,
       transcribing: session.transcribing ?? false,
+      hasSlides: session.slidesFileId !== undefined,
+      slideCount: session.slideCount ?? 0,
+      slideIndex: session.slideIndex ?? 0,
+      stageMode: session.stageMode ?? "slides",
+      broadcasting: session.broadcasting ?? false,
+      liveEpoch: session.liveEpoch ?? 0,
+      handMode: session.handMode ?? false,
+      relayUntil: session.relayUntil ?? 0,
     };
   },
 });

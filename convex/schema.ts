@@ -14,7 +14,42 @@ export default defineSchema({
     flushPending: v.optional(v.boolean()),
     // Sessions without a course (created before courses existed) keep their own.
     tokenHash: v.optional(v.string()),
+    // The live room. Slides are one PDF; everyone sees page slideIndex (0-based).
+    slidesFileId: v.optional(v.id("_storage")),
+    slideCount: v.optional(v.number()),
+    slideIndex: v.optional(v.number()),
+    // What the shared stage shows: the slides or the 3D molecule.
+    stageMode: v.optional(v.union(v.literal("slides"), v.literal("molecule"))),
+    // True while the professor's camera/mic is on air. liveEpoch goes up each
+    // time it starts, so students' browsers know to (re)connect.
+    broadcasting: v.optional(v.boolean()),
+    liveEpoch: v.optional(v.number()),
+    // True while the professor is turning the shared molecule by hand: the
+    // camera with the molecule over it takes the main screen for everyone.
+    handMode: v.optional(v.boolean()),
+    // Until this time (ms) some student can't get a direct connection, so the
+    // professor's page also sends low-rate frames and audio through Convex.
+    relayUntil: v.optional(v.number()),
   }).index("by_code", ["code"]),
+
+  // Fallback media for students whose network blocks WebRTC: the latest
+  // camera frame (JPEG) and the latest audio chunk (16 kHz PCM), overwritten.
+  relay: defineTable({
+    sessionId: v.id("sessions"),
+    kind: v.union(v.literal("video"), v.literal("audio")),
+    seq: v.number(),
+    data: v.bytes(),
+  }).index("by_session_and_kind", ["sessionId", "kind"]),
+
+  // Molecules Claude found on each slide, so the gesture button can put the
+  // one being taught on stage.
+  slideMolecules: defineTable({
+    sessionId: v.id("sessions"),
+    slideIndex: v.number(),
+    // The deck it was read from; a new upload makes old results stale.
+    fileId: v.id("_storage"),
+    molecules: v.array(v.object({ name: v.string(), smiles: v.string() })),
+  }).index("by_session_and_slideIndex", ["sessionId", "slideIndex"]),
 
   // The professor's identity: a hash of each browser token allowed to manage it.
   courses: defineTable({
@@ -56,6 +91,14 @@ export default defineSchema({
     status: v.union(v.literal("open"), v.literal("answered")),
     // Set when a similar question from this session was found.
     groupId: v.optional(v.id("questionGroups")),
+    // The slide on screen when it was asked, if the session has slides.
+    slideIndex: v.optional(v.number()),
+    // The student read the AI's answer and still wants the professor: when,
+    // and what is still unclear (optional).
+    escalatedAt: v.optional(v.number()),
+    escalationNote: v.optional(v.string()),
+    // The professor's own reply, shown to this student only.
+    professorReply: v.optional(v.string()),
   })
     .index("by_session", ["sessionId"])
     .index("by_session_and_student", ["sessionId", "studentId"])
@@ -81,16 +124,45 @@ export default defineSchema({
     label: v.optional(v.string()),
   }).index("by_session", ["sessionId"]),
 
+  // One vote per student per slide (slideIndex unset when there are no slides),
+  // so the professor can see which slides lost the class.
   feedback: defineTable({
     sessionId: v.id("sessions"),
     studentId: v.string(),
     value: v.union(v.literal("confused"), v.literal("understood")),
+    slideIndex: v.optional(v.number()),
   })
     .index("by_session", ["sessionId"])
-    .index("by_session_and_student", ["sessionId", "studentId"]),
+    .index("by_session_and_student", ["sessionId", "studentId"])
+    .index("by_session_and_slideIndex_and_studentId", ["sessionId", "slideIndex", "studentId"]),
+
+  // WebRTC signalling for the professor's camera: offers, answers and ICE
+  // candidates passed between browsers, deleted by the recipient once read.
+  // Peer ids are "professor" or a student's browser id.
+  rtcSignals: defineTable({
+    sessionId: v.id("sessions"),
+    from: v.string(),
+    to: v.string(),
+    kind: v.union(
+      v.literal("join"),
+      v.literal("offer"),
+      v.literal("answer"),
+      v.literal("ice"),
+      v.literal("leave"),
+    ),
+    payload: v.string(),
+  }).index("by_session_and_to", ["sessionId", "to"]),
 
   // Public: at most one molecule shared with the class per session.
   published_visuals: defineTable(visualFields).index("by_session", ["sessionId"]),
+
+  // Public, high-churn: the professor's camera on the shared molecule (3Dmol's
+  // getView array), so students' viewers can follow it. Kept apart from
+  // published_visuals so frequent updates don't resend the structure.
+  stageViews: defineTable({
+    sessionId: v.id("sessions"),
+    view: v.array(v.number()),
+  }).index("by_session", ["sessionId"]),
 
   // Public: at most one answer shared with the class per session. A snapshot,
   // anonymous: the question text and what the student was shown, nothing else.
