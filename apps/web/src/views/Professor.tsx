@@ -174,10 +174,15 @@ function SuggestionCard({
         >
           Show verified highlight in preview
         </button>
-      ) : (
+      ) : suggestion.molecule ? (
         <p className="error">
           Highlight not verified{suggestion.note ? `: ${suggestion.note}` : ""}
         </p>
+      ) : (
+        <p className="muted">No highlight proposed for this question.</p>
+      )}
+      {suggestion.cached && suggestion.note && !suggestion.previewId && !suggestion.molecule && (
+        <p className="muted">{suggestion.note}</p>
       )}
     </div>
   );

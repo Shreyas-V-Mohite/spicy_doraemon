@@ -37,8 +37,8 @@ export interface Suggestion {
   explanation: string;
   sourceIds: string[];
   teachingAction: string;
-  molecule: string;
-  groupId: string;
+  molecule?: string;
+  groupId?: string;
   previewId?: string;
   note?: string;
   cached: boolean;

@@ -20,7 +20,7 @@ import {
 } from "./lib/lesson";
 
 const MODEL = "claude-sonnet-5-5";
-const CLAUDE_TIMEOUT_MS = 3000;
+const CLAUDE_TIMEOUT_MS = 10000;
 
 export const getContext = internalQuery({
   args: {
@@ -57,8 +57,8 @@ export const save = internalMutation({
     explanation: v.string(),
     sourceIds: v.array(v.string()),
     teachingAction: v.string(),
-    molecule: v.string(),
-    groupId: v.string(),
+    molecule: v.optional(v.string()),
+    groupId: v.optional(v.string()),
     previewId: v.optional(v.id("previews")),
     note: v.optional(v.string()),
     cached: v.boolean(),
@@ -80,7 +80,7 @@ export const listForProfessor = query({
   },
 });
 
-class ClaudeTimeout extends Error {}
+class ClaudeTimeout extends Error { }
 
 // One structured-output call. Throws ClaudeTimeout when it exceeds the
 // time budget; any other failure (API error, bad output) is a plain Error.
@@ -184,21 +184,20 @@ export const suggest = action({
       suggestion = pickFallback(info.question);
       cached = true;
     }
-    if (suggestion === null) {
-      throw new ConvexError("Copilot is unavailable and no cached answer fits");
-    }
 
     // Only a highlight RDKit verifies gets a preview.
     let previewId: Id<"previews"> | undefined;
     let chemNote: string | undefined;
-    try {
-      const visual = await fetchHighlight(suggestion.molecule, suggestion.groupId);
-      previewId = await ctx.runMutation(internal.visuals.savePreview, {
-        sessionId: args.sessionId,
-        ...visual,
-      });
-    } catch (err) {
-      chemNote = err instanceof ConvexError ? String(err.data) : "Could not verify";
+    if (suggestion.molecule && suggestion.groupId) {
+      try {
+        const visual = await fetchHighlight(suggestion.molecule, suggestion.groupId);
+        previewId = await ctx.runMutation(internal.visuals.savePreview, {
+          sessionId: args.sessionId,
+          ...visual,
+        });
+      } catch (err) {
+        chemNote = err instanceof ConvexError ? String(err.data) : "Could not verify";
+      }
     }
     const note = cached
       ? [claudeNote, chemNote].filter(Boolean).join("; ") || undefined

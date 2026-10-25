@@ -22,8 +22,9 @@ export interface Suggestion {
   explanation: string;
   sourceIds: string[];
   teachingAction: string;
-  molecule: string;
-  groupId: string;
+  // Absent when there is nothing to highlight (for example an off-topic question).
+  molecule?: string;
+  groupId?: string;
 }
 
 // Used when Claude is slow or down, so the rehearsed demo never dead-ends.
@@ -65,10 +66,19 @@ export const FALLBACKS: { keywords: string[]; suggestion: Suggestion }[] = [
   },
 ];
 
-export function pickFallback(question: string): Suggestion | null {
+// Last resort: no highlight, but the professor still gets something to act on.
+const GENERIC_FALLBACK: Suggestion = {
+  explanation:
+    "The approved excerpts don't cover this question directly. The common thread is that a functional group, a specific arrangement of atoms, decides how a molecule behaves.",
+  sourceIds: ["ex-1"],
+  teachingAction:
+    "Ask the student which atoms or group they are unsure about, then find that group on one of the demo molecules.",
+};
+
+export function pickFallback(question: string): Suggestion {
   const text = question.toLowerCase();
   for (const f of FALLBACKS) {
     if (f.keywords.some((k) => text.includes(k))) return f.suggestion;
   }
-  return null;
+  return GENERIC_FALLBACK;
 }
