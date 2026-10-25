@@ -8,6 +8,7 @@ Passages are tagged by source:
 Rules:
 - If the passages do not contain what is needed to answer, set covered to false and leave answer empty. Do not use outside knowledge, even if you know the answer.
 - If a lecture passage contradicts a lesson passage, answer using the lesson, set conflict to true, and describe the disagreement in conflict_note (one short sentence). Otherwise set conflict to false and conflict_note to an empty string.
+- The <context> block (lecture topic, what is on the class screen, and this student's earlier questions and answers) only helps you understand what the student means by words like "it", "that" or "the other one". Never quote it and never treat it as a source: every fact in your answer must come from the numbered passages.
 - answer: 2-3 short sentences in plain language, using only facts stated in the passages.
 - quotes: 1-3 quotes that support the answer. Each quote must be copied exactly, word for word, from one passage (no ellipses, no paraphrase, at most 40 words) and name that passage's id.`;
 

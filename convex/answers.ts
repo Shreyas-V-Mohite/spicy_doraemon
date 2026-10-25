@@ -8,7 +8,8 @@ import { quoteAppears } from "./lib/verify";
 import { GROUP_THRESHOLD, REUSE_THRESHOLD } from "./grouping";
 import { embedTexts } from "./lib/embed";
 import { quoteValidator } from "./lib/quotes";
-import { searchCourse, type Passage } from "./retrieval";
+import { contextualQuery, looksContextual } from "./lib/context";
+import { mergePassages, searchCourse, type Passage } from "./retrieval";
 
 const MODEL = "claude-sonnet-5-5";
 const CLAUDE_TIMEOUT_MS = 10000;
@@ -84,7 +85,30 @@ class VerificationFailed extends Error {}
 // One Claude call. Throws ClaudeTimeout on a slow call, VerificationFailed if
 // a quote can't be found in the passage it names; returns not_covered when
 // Claude says the passages don't answer the question.
-async function askClaude(question: string, items: Item[]): Promise<Outcome> {
+type Memory = {
+  topic: string;
+  screen: string | null;
+  history: { question: string; answer: string | null }[];
+};
+
+function renderContext(memory: Memory): string {
+  const lines = [`Lecture topic: ${memory.topic}`];
+  if (memory.screen) lines.push(`On the class screen: ${memory.screen}`);
+  if (memory.history.length > 0) {
+    lines.push("This student's earlier questions in this session:");
+    for (const h of memory.history) {
+      lines.push(`Q: ${h.question}`);
+      if (h.answer) lines.push(`A: ${h.answer}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+async function askClaude(
+  question: string,
+  items: Item[],
+  memory: Memory,
+): Promise<Outcome> {
   const byId = new Map(items.map((i) => [i.id, i]));
   const context = items
     .map((i) => `[${i.id}] (${i.tag}) ${i.passage.text}`)
@@ -106,7 +130,7 @@ async function askClaude(question: string, items: Item[]): Promise<Outcome> {
       messages: [
         {
           role: "user",
-          content: `<passages>\n${context}\n</passages>\n\n<question>\n${question}\n</question>`,
+          content: `<context>\n${renderContext(memory)}\n</context>\n\n<passages>\n${context}\n</passages>\n\n<question>\n${question}\n</question>`,
         },
       ],
     });
@@ -190,64 +214,93 @@ export const generate = internalAction({
       if (job === null) return;
 
       // Embed once: the same vector finds similar questions and lesson passages.
+      const memory = await ctx.runQuery(internal.memory.forQuestion, {
+        questionId: job.questionId,
+      });
+      // A follow-up is also searched with its context, and is never grouped
+      // with or answered from other students' questions.
+      const contextual = looksContextual(job.question);
+      const followUpText = contextual
+        ? contextualQuery({
+            screen: memory.screen,
+            previousQuestion: memory.history.at(-1)?.question ?? null,
+            question: job.question,
+          })
+        : null;
       let vector: number[];
+      let contextVector: number[] | null = null;
       try {
-        [vector] = await embedTexts([job.question], "query");
+        const texts =
+          followUpText && followUpText !== job.question
+            ? [job.question, followUpText]
+            : [job.question];
+        const vectors = await embedTexts(texts, "query");
+        vector = vectors[0];
+        contextVector = vectors[1] ?? null;
       } catch (err) {
         await done({ status: "failed", note: `Search failed: ${String(err).slice(0, 150)}` });
         return;
       }
 
       // Similar earlier questions in this session: group with them, and
-      // reuse a verified answer if one is nearly identical.
-      const hits = await ctx.vectorSearch("questionVectors", "by_embedding", {
-        vector,
-        limit: 5,
-        filter: (q) => q.eq("sessionId", job.sessionId),
-      });
-      const neighbors = await ctx.runQuery(internal.grouping.neighborInfo, {
-        vectorIds: hits.map((h) => h._id),
-      });
-      const scored = hits.flatMap((h) => {
-        const info = neighbors.find((n) => n.vectorId === h._id);
-        return info ? [{ ...info, score: h._score }] : [];
-      });
-      const groupWith = scored.find((n) => n.score >= GROUP_THRESHOLD);
-      const reuseFrom = scored.find(
-        (n) =>
-          n.score >= REUSE_THRESHOLD &&
-          n.reusable &&
-          n.answerText !== null &&
-          n.answerQuotes !== null,
-      );
-      const group = await ctx.runMutation(internal.grouping.assign, {
-        questionId: job.questionId,
-        sessionId: job.sessionId,
-        embedding: vector,
-        neighborQuestionId: groupWith?.questionId ?? null,
-      });
-      if (group && group.students >= 2 && !group.labelled) {
-        await ctx.scheduler.runAfter(0, internal.grouping.labelGroup, {
-          groupId: group.groupId,
+      // reuse a verified answer if one is nearly identical. Follow-ups skip
+      // this: "why does that happen?" means something different to each student.
+      if (!contextual) {
+        const hits = await ctx.vectorSearch("questionVectors", "by_embedding", {
+          vector,
+          limit: 5,
+          filter: (q) => q.eq("sessionId", job.sessionId),
         });
-      }
+        const neighbors = await ctx.runQuery(internal.grouping.neighborInfo, {
+          vectorIds: hits.map((h) => h._id),
+        });
+        const scored = hits.flatMap((h) => {
+          const info = neighbors.find((n) => n.vectorId === h._id);
+          return info ? [{ ...info, score: h._score }] : [];
+        });
+        const groupWith = scored.find((n) => n.score >= GROUP_THRESHOLD);
+        const reuseFrom = scored.find(
+          (n) =>
+            n.score >= REUSE_THRESHOLD &&
+            n.reusable &&
+            n.answerText !== null &&
+            n.answerQuotes !== null,
+        );
+        const group = await ctx.runMutation(internal.grouping.assign, {
+          questionId: job.questionId,
+          sessionId: job.sessionId,
+          embedding: vector,
+          neighborQuestionId: groupWith?.questionId ?? null,
+        });
+        if (group && group.students >= 2 && !group.labelled) {
+          await ctx.scheduler.runAfter(0, internal.grouping.labelGroup, {
+            groupId: group.groupId,
+          });
+        }
 
-      if (reuseFrom) {
-        await done({
-          status: "answered",
-          text: reuseFrom.answerText!,
-          quotes: reuseFrom.answerQuotes!,
-          note: "Reused from a near-identical question",
-          reusedFrom: reuseFrom.questionId,
-          topScore: reuseFrom.score,
-        });
-        return;
+        if (reuseFrom) {
+          await done({
+            status: "answered",
+            text: reuseFrom.answerText!,
+            quotes: reuseFrom.answerQuotes!,
+            note: "Reused from a near-identical question",
+            reusedFrom: reuseFrom.questionId,
+            topScore: reuseFrom.score,
+          });
+          return;
+        }
       }
 
       let passages: Passage[];
       let recent: { text: string; topic: string };
       try {
         passages = await searchCourse(ctx, job.courseId, vector);
+        if (contextVector) {
+          passages = mergePassages(
+            passages,
+            await searchCourse(ctx, job.courseId, contextVector),
+          );
+        }
         recent = await ctx.runQuery(internal.transcript.recent, {
           sessionId: job.sessionId,
           sinceMs: Date.now() - RECENT_WINDOW_MS,
@@ -311,7 +364,7 @@ export const generate = internalAction({
       const claudeStart = Date.now();
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const outcome = await askClaude(job.question, items);
+          const outcome = await askClaude(job.question, items, memory);
           await done({
             ...outcome,
             topScore,

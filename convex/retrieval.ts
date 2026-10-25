@@ -105,6 +105,17 @@ export async function searchCourse(
   return passages.sort((a, b) => b.score - a.score);
 }
 
+// Combines two searches, keeping each passage's best score.
+export function mergePassages(a: Passage[], b: Passage[]): Passage[] {
+  const best = new Map<string, Passage>();
+  for (const p of [...a, ...b]) {
+    const key = `${p.source}:${p.chunkId}`;
+    const seen = best.get(key);
+    if (!seen || p.score > seen.score) best.set(key, p);
+  }
+  return [...best.values()].sort((x, y) => y.score - x.score);
+}
+
 // For checking retrieval quality from the CLI.
 export const search = internalAction({
   args: { courseId: v.id("courses"), question: v.string() },

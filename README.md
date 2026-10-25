@@ -20,6 +20,7 @@ The idea: an AI can help a professor teach in the moment, but it should never pu
 | Lessons | Upload or paste, passage preview, edit (unchanged passages keep their embeddings), delete; up to 50,000 words |
 | Automatic answers | Vector search plus Claude, quotes verified word for word, "not covered" flags, slow-Claude fallback, 20s cooldown and question caps |
 | Lecture transcription | Chrome's speech recognition on the professor page, kept as editable lines; embedded in chunks and searched with the lessons (this session and earlier ones); the last two minutes are always included; the lesson wins when the lecture contradicts it, and the professor is flagged; students are told when transcription is on |
+| Follow-up questions | Each answer is given the asking student's own earlier questions and answers in the session, plus the lecture topic and what is on the class screen, so "explain that again" and "why is this group acidic?" work. Follow-ups are also searched with their context, and are never grouped with other students' questions or answered from them |
 | Similar questions | Questions that mean the same thing are grouped into one card with a distinct-student count and a short label; a near-identical question reuses the verified answer; students see "N classmates asked something similar" |
 | Professor page | One page with a stage (join code, QR, shared molecule, votes) and a private queue of cards (not-covered first, then the most shared); Present mode |
 | Student page | Join by code, ask, vote, see answers with quotes |
@@ -29,7 +30,6 @@ The idea: an AI can help a professor teach in the moment, but it should never pu
 
 ## Not built yet
 
-- Session memory for follow-up questions
 - Hand gestures and the camera stage (a teammate's viewer)
 - Stable hosting: the chemistry service needs a tunnel to your machine, and the frontend is not deployed
 
