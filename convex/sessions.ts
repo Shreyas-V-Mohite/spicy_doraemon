@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { sha256Hex } from "./lib/auth";
+import { requireCourseProfessor } from "./lib/auth";
 
 // No 0/O/1/I so codes can be read aloud.
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -13,12 +13,14 @@ function randomCode(): string {
   return code;
 }
 
-// The professor token is generated in the browser; only its hash is stored.
+// A session belongs to a course; the course's professor token manages it.
 export const create = mutation({
-  args: { passcode: v.string(), token: v.string(), topic: v.string() },
+  args: { courseId: v.id("courses"), token: v.string(), topic: v.string() },
   handler: async (ctx, args) => {
-    if (args.passcode !== process.env.PROFESSOR_PASSCODE) {
-      throw new ConvexError("Wrong passcode");
+    await requireCourseProfessor(ctx, args.courseId, args.token);
+    const topic = args.topic.trim();
+    if (topic.length === 0 || topic.length > 200) {
+      throw new ConvexError("Topic must be 1-200 characters");
     }
     let code = randomCode();
     while (
@@ -31,10 +33,28 @@ export const create = mutation({
     }
     const sessionId = await ctx.db.insert("sessions", {
       code,
-      topic: args.topic,
-      tokenHash: await sha256Hex(args.token),
+      topic,
+      courseId: args.courseId,
     });
     return { sessionId, code };
+  },
+});
+
+// A course's sessions, newest first, for reopening a session.
+export const listForCourse = query({
+  args: { courseId: v.id("courses"), token: v.string() },
+  handler: async (ctx, args) => {
+    await requireCourseProfessor(ctx, args.courseId, args.token);
+    const sessions = await ctx.db.query("sessions").order("desc").take(200);
+    return sessions
+      .filter((s) => s.courseId === args.courseId)
+      .slice(0, 30)
+      .map((s) => ({
+        _id: s._id,
+        code: s.code,
+        topic: s.topic,
+        _creationTime: s._creationTime,
+      }));
   },
 });
 
@@ -47,6 +67,11 @@ export const getByCode = query({
       .withIndex("by_code", (q) => q.eq("code", args.code.toUpperCase()))
       .unique();
     if (session === null) return null;
-    return { _id: session._id, code: session.code, topic: session.topic };
+    return {
+      _id: session._id,
+      code: session.code,
+      topic: session.topic,
+      courseId: session.courseId,
+    };
   },
 });

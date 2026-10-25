@@ -7,8 +7,42 @@ export default defineSchema({
   sessions: defineTable({
     code: v.string(),
     topic: v.string(),
-    tokenHash: v.string(),
+    courseId: v.optional(v.id("courses")),
+    // Sessions without a course (created before courses existed) keep their own.
+    tokenHash: v.optional(v.string()),
   }).index("by_code", ["code"]),
+
+  // The professor's identity: a hash of each browser token allowed to manage it.
+  courses: defineTable({
+    name: v.string(),
+    tokenHashes: v.array(v.string()),
+  }),
+
+  lessons: defineTable({
+    courseId: v.id("courses"),
+    title: v.string(),
+    text: v.string(),
+    wordCount: v.number(),
+    chunkCount: v.number(),
+    status: v.union(v.literal("saving"), v.literal("ready")),
+  }).index("by_course", ["courseId"]),
+
+  // Searchable passages. `text` is exactly what quotes are verified against;
+  // the embedding also covers the heading.
+  lessonChunks: defineTable({
+    courseId: v.id("courses"),
+    lessonId: v.id("lessons"),
+    ordinal: v.number(),
+    heading: v.string(),
+    text: v.string(),
+    embedding: v.array(v.float64()),
+  })
+    .index("by_lesson", ["lessonId"])
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 1024,
+      filterFields: ["courseId"],
+    }),
 
   // studentId is a random id generated in the student's browser.
   questions: defineTable({

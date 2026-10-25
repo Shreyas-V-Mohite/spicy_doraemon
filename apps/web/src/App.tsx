@@ -4,6 +4,7 @@ import { useConvexStore } from "./store/convexStore";
 import ErrorBoundary from "./ErrorBoundary";
 import Home from "./views/Home";
 import ProfessorStart from "./views/ProfessorStart";
+import CoursePage from "./views/CoursePage";
 import Professor from "./views/Professor";
 import Student from "./views/Student";
 import Presentation from "./views/Presentation";
@@ -16,6 +17,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/professor" element={<ProfessorStart />} />
+        <Route path="/professor/course/:courseId" element={<CoursePage />} />
         <Route path="/professor/:code" element={<Professor />} />
         <Route path="/s/:code" element={<Student />} />
         <Route path="/present/:code" element={<Presentation />} />

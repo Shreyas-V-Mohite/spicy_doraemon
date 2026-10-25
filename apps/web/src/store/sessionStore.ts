@@ -1,7 +1,10 @@
 import { createContext, useContext } from "react";
 import type {
+  Course,
+  CourseSession,
   FeedbackCounts,
   FeedbackValue,
+  Lesson,
   PublicSession,
   Preview,
   Question,
@@ -38,8 +41,54 @@ export interface SessionStore {
     token: string | null,
   ): Preview[] | undefined;
 
-  createSession(args: {
+  // null means the passcode was wrong.
+  useCourses(passcode: string | null): Course[] | null | undefined;
+  // null means this browser has no access to the course.
+  useCourse(courseId: string, token: string | null): Course | null | undefined;
+  useLessons(
+    courseId: string | undefined,
+    token: string | null,
+  ): Lesson[] | undefined;
+  useLessonText(
+    courseId: string | undefined,
+    token: string | null,
+    lessonId: string | null,
+  ): { title: string; text: string } | undefined;
+  useCourseSessions(
+    courseId: string | undefined,
+    token: string | null,
+  ): CourseSession[] | undefined;
+
+  createCourse(args: {
     passcode: string;
+    token: string;
+    name: string;
+  }): Promise<string>;
+  claimCourse(args: {
+    passcode: string;
+    courseId: string;
+    token: string;
+  }): Promise<void>;
+  createLesson(args: {
+    courseId: string;
+    token: string;
+    title: string;
+    text: string;
+  }): Promise<void>;
+  updateLesson(args: {
+    courseId: string;
+    token: string;
+    lessonId: string;
+    title: string;
+    text: string;
+  }): Promise<void>;
+  deleteLesson(args: {
+    courseId: string;
+    token: string;
+    lessonId: string;
+  }): Promise<void>;
+  createSession(args: {
+    courseId: string;
     token: string;
     topic: string;
   }): Promise<{ sessionId: string; code: string }>;

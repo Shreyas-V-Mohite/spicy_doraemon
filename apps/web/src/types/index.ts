@@ -2,6 +2,7 @@ export interface PublicSession {
   _id: string;
   code: string;
   topic: string;
+  courseId?: string;
 }
 
 export interface Question {
@@ -42,4 +43,24 @@ export interface Suggestion {
   previewId?: string;
   note?: string;
   cached: boolean;
+}
+
+export interface Course {
+  _id: string;
+  name: string;
+}
+
+export interface Lesson {
+  _id: string;
+  title: string;
+  wordCount: number;
+  chunkCount: number;
+  status: "saving" | "ready";
+}
+
+export interface CourseSession {
+  _id: string;
+  code: string;
+  topic: string;
+  _creationTime: number;
 }

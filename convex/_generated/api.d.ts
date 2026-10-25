@@ -10,9 +10,13 @@
 
 import type * as ai_prompts from "../ai/prompts.js";
 import type * as copilot from "../copilot.js";
+import type * as courses from "../courses.js";
 import type * as feedback from "../feedback.js";
+import type * as lessons from "../lessons.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_chem from "../lib/chem.js";
+import type * as lib_chunk from "../lib/chunk.js";
+import type * as lib_embed from "../lib/embed.js";
 import type * as lib_lesson from "../lib/lesson.js";
 import type * as lib_visual from "../lib/visual.js";
 import type * as questions from "../questions.js";
@@ -28,9 +32,13 @@ import type {
 declare const fullApi: ApiFromModules<{
   "ai/prompts": typeof ai_prompts;
   copilot: typeof copilot;
+  courses: typeof courses;
   feedback: typeof feedback;
+  lessons: typeof lessons;
   "lib/auth": typeof lib_auth;
   "lib/chem": typeof lib_chem;
+  "lib/chunk": typeof lib_chunk;
+  "lib/embed": typeof lib_embed;
   "lib/lesson": typeof lib_lesson;
   "lib/visual": typeof lib_visual;
   questions: typeof questions;

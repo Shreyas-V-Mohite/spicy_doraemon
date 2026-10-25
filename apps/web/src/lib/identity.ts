@@ -28,12 +28,12 @@ export function getStudentId(): string {
   return id;
 }
 
-export function saveProfessorToken(code: string, token: string) {
-  write(`professorToken:${code}`, token);
+export function saveCourseToken(courseId: string, token: string) {
+  write(`courseToken:${courseId}`, token);
 }
 
-export function getProfessorToken(code: string): string | null {
-  return read(`professorToken:${code}`);
+export function getCourseToken(courseId: string): string | null {
+  return read(`courseToken:${courseId}`);
 }
 
 export function errorMessage(err: unknown): string {

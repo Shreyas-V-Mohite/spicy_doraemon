@@ -4,9 +4,15 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import type { SessionStore } from "./sessionStore";
 
 const sid = (id: string) => id as Id<"sessions">;
+const cid = (id: string) => id as Id<"courses">;
 
 export function useConvexStore(): SessionStore {
   const create = useMutation(api.sessions.create);
+  const makeCourse = useMutation(api.courses.create);
+  const claim = useMutation(api.courses.claim);
+  const addLesson = useAction(api.lessons.create);
+  const editLesson = useAction(api.lessons.update);
+  const dropLesson = useAction(api.lessons.remove);
   const submit = useMutation(api.questions.submit);
   const setVote = useMutation(api.feedback.set);
   const answer = useMutation(api.questions.markAnswered);
@@ -33,6 +39,34 @@ export function useConvexStore(): SessionStore {
         api.feedback.counts,
         sessionId ? { sessionId: sid(sessionId) } : "skip",
       ),
+    useCourses: (passcode) =>
+      useQuery(api.courses.list, passcode ? { passcode } : "skip"),
+    useCourse: (courseId, token) =>
+      useQuery(
+        api.courses.get,
+        token ? { courseId: cid(courseId), token } : "skip",
+      ),
+    useLessons: (courseId, token) =>
+      useQuery(
+        api.lessons.list,
+        courseId && token ? { courseId: cid(courseId), token } : "skip",
+      ),
+    useLessonText: (courseId, token, lessonId) =>
+      useQuery(
+        api.lessons.getText,
+        courseId && token && lessonId
+          ? {
+              courseId: cid(courseId),
+              token,
+              lessonId: lessonId as Id<"lessons">,
+            }
+          : "skip",
+      ),
+    useCourseSessions: (courseId, token) =>
+      useQuery(
+        api.sessions.listForCourse,
+        courseId && token ? { courseId: cid(courseId), token } : "skip",
+      ),
     useMyVote: (sessionId, studentId) =>
       useQuery(
         api.feedback.mine,
@@ -54,7 +88,31 @@ export function useConvexStore(): SessionStore {
         sessionId && token ? { sessionId: sid(sessionId), token } : "skip",
       ),
 
-    createSession: (args) => create(args),
+    createCourse: (args) => makeCourse(args),
+    claimCourse: async ({ passcode, courseId, token }) => {
+      await claim({ passcode, courseId: cid(courseId), token });
+    },
+    createLesson: async ({ courseId, token, title, text }) => {
+      await addLesson({ courseId: cid(courseId), token, title, text });
+    },
+    updateLesson: async ({ courseId, token, lessonId, title, text }) => {
+      await editLesson({
+        courseId: cid(courseId),
+        token,
+        lessonId: lessonId as Id<"lessons">,
+        title,
+        text,
+      });
+    },
+    deleteLesson: async ({ courseId, token, lessonId }) => {
+      await dropLesson({
+        courseId: cid(courseId),
+        token,
+        lessonId: lessonId as Id<"lessons">,
+      });
+    },
+    createSession: ({ courseId, token, topic }) =>
+      create({ courseId: cid(courseId), token, topic }),
     ask: async ({ sessionId, studentId, text }) => {
       await submit({ sessionId: sid(sessionId), studentId, text });
     },

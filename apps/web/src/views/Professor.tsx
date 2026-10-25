@@ -1,7 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { useStore } from "../store/sessionStore";
 import { useState } from "react";
-import { errorMessage, getProfessorToken } from "../lib/identity";
+import { errorMessage, getCourseToken } from "../lib/identity";
 import { EXCERPTS } from "../../../../convex/lib/lesson";
 import type { Suggestion } from "../types";
 import VisualPanel from "./VisualPanel";
@@ -10,7 +10,7 @@ export default function Professor() {
   const { code = "" } = useParams();
   const store = useStore();
   const session = store.useSession(code);
-  const token = getProfessorToken(code);
+  const token = session?.courseId ? getCourseToken(session.courseId) : null;
   const questions = store.useProfessorQuestions(session?._id, token);
   const counts = store.useFeedbackCounts(session?._id);
   const suggestions = store.useProfessorSuggestions(session?._id, token);
@@ -31,7 +31,7 @@ export default function Professor() {
     return (
       <main className="page">
         <p>This browser isn't the professor for session {code}.</p>
-        <Link to="/professor">Start a new session</Link>
+        <Link to="/professor">Sign in as professor</Link>
       </main>
     );
   }
