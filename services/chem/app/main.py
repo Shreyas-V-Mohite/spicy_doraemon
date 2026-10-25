@@ -1,4 +1,7 @@
-from fastapi import FastAPI, HTTPException
+import os
+import secrets
+
+from fastapi import Depends, FastAPI, Header, HTTPException
 
 from .groups import GROUPS
 from .molecule import (
@@ -10,6 +13,18 @@ from .molecule import (
 from .pubchem import MoleculeNotFound, PubChemUnavailable
 
 app = FastAPI(title="Chemistry service")
+
+
+def require_key(x_api_key: str | None = Header(default=None)) -> None:
+    """If CHEM_API_KEY is set, only callers that send it may use the service.
+
+    The service is read-only and serves public data, but it does real work
+    (PubChem lookups, 3D structure builds), so a hosted copy should not be
+    open to everyone. /health stays open for the host's health checks.
+    """
+    expected = os.environ.get("CHEM_API_KEY")
+    if expected and not (x_api_key and secrets.compare_digest(x_api_key, expected)):
+        raise HTTPException(401, detail="unauthorized")
 
 
 def _payload(query: str | None, smiles: str | None) -> dict:
@@ -34,18 +49,18 @@ def health() -> dict:
     return {"ok": True}
 
 
-@app.get("/groups")
+@app.get("/groups", dependencies=[Depends(require_key)])
 def groups() -> dict:
     """The functional groups that can be detected and highlighted."""
     return {gid: g["label"] for gid, g in GROUPS.items()}
 
 
-@app.get("/molecule")
+@app.get("/molecule", dependencies=[Depends(require_key)])
 def molecule(query: str | None = None, smiles: str | None = None) -> dict:
     return _payload(query, smiles)
 
 
-@app.get("/highlight")
+@app.get("/highlight", dependencies=[Depends(require_key)])
 def highlight(
     group_id: str, query: str | None = None, smiles: str | None = None
 ) -> dict:

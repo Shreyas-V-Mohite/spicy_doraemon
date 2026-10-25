@@ -10,11 +10,14 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 
-// Cosine-similarity cutoffs, picked from a small sample of paraphrases:
-// same question reworded scored 0.91-0.99, related-but-different 0.80.
-// Grouping is strict (a missed merge costs little, a false one hides a
-// question); reuse is stricter still (nearly word for word).
-export const GROUP_THRESHOLD = 0.88;
+// Cosine-similarity cutoffs, measured with scripts/eval.mjs on 13 reworded
+// pairs and 13 related-but-different pairs: rewordings scored 0.865-0.99,
+// different questions up to 0.884 ("What is an ester?" vs "How is an ester
+// made?"). No cutoff separates them perfectly, so grouping is strict: a missed
+// merge costs little, a false one hides a question. At 0.90 nothing wrongly
+// merged and 11 of 13 rewordings still did. Reuse is stricter still (nearly
+// word for word); it had no false matches.
+export const GROUP_THRESHOLD = 0.9;
 export const REUSE_THRESHOLD = 0.97;
 
 import { quoteAppears } from "./lib/verify";

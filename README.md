@@ -37,9 +37,9 @@ Design decisions and the data model are in `PROJECT_STRUCTURE.md`.
 
 ## Run it locally
 
-You need Node 20+, `uv`, and `cloudflared` (or another tunnel).
+You need Node 20+, `uv`, and `cloudflared` (for a local tunnel).
 
-1. Install and start Convex (first run asks you to log in):
+1. Install and start Convex (the first run asks you to log in):
    ```
    npm install
    npx convex dev
@@ -49,23 +49,27 @@ You need Node 20+, `uv`, and `cloudflared` (or another tunnel).
    npx convex env set PROFESSOR_PASSCODE <passcode>
    npx convex env set ANTHROPIC_API_KEY <key>
    npx convex env set VOYAGE_API_KEY <key>   # embeddings; Atlas-issued (al-) keys work too
-   npx convex env set CHEM_SERVICE_URL <public url of the chemistry service>
    ```
-3. Start the chemistry service and a tunnel so Convex (in the cloud) can reach it:
+3. Start the chemistry service, then publish it so Convex (in the cloud) can reach it. `npm run tunnel` starts a free Cloudflare tunnel and sets `CHEM_SERVICE_URL` for you:
    ```
-   cd services/chem && uv sync && uv run uvicorn app.main:app --port 8000
-   cloudflared tunnel --url http://localhost:8000
+   cd services/chem && uv sync && uv run uvicorn app.main:app --port 8000   # one terminal
+   npm run tunnel                                                          # another
    ```
-   Quick-tunnel URLs change on every restart; set `CHEM_SERVICE_URL` again each time.
-4. Create `apps/web/.env.local` with `VITE_CONVEX_URL=<your Convex deployment URL>` and start the frontend:
+4. Fetch MediaPipe's hand model once (about 8 MB, for hand gestures), create `apps/web/.env.local` with `VITE_CONVEX_URL=<your Convex deployment URL>`, and start the web app:
    ```
+   npm run models -w @spicy/hand-gesture
    npm run dev -w web
    ```
-5. Open `/professor`, enter the passcode, create a course, add the sample lesson from `samples/functional-groups.md`, and start a session. Join from another window at `/s/<CODE>` and ask "Why is acetic acid acidic?".
+5. Check everything, and create the demo course and lesson:
+   ```
+   npm run preflight     # says what is missing and how to fix it
+   npm run demo:seed
+   ```
+6. Open `/professor`, enter the passcode and open the course. Join from another window at `/s/<CODE>` and ask "Why is acetic acid acidic?".
 
-For hand gestures, fetch MediaPipe's model once with `npm run models -w @spicy/hand-gesture` (about 8 MB download; the camera needs localhost or HTTPS).
+Tests: `cd services/chem && uv run pytest`, `npm test -w @spicy/hand-gesture`, `npm run typecheck`. To measure the answer thresholds on a lesson, run `node scripts/eval.mjs` (it calls real services, so it costs a little).
 
-Tests: `cd services/chem && uv run pytest`, `npm test -w @spicy/hand-gesture`, and `npm run typecheck`.
+To put it online (chemistry service on Render, web app on Vercel), see `docs/deploy.md`. For the demo, see `docs/demo-script.md`.
 
 ## Safety model
 

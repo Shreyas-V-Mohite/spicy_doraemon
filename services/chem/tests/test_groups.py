@@ -121,3 +121,18 @@ def test_bad_input_is_refused_with_a_reason(params, code, detail):
 def test_unverifiable_highlight_is_refused_for_smiles_too():
     r = client.get("/highlight", params={"smiles": "CCO", "group_id": "ester"})
     assert (r.status_code, r.json()["detail"]) == (404, "group_not_in_molecule")
+
+
+def test_without_a_key_configured_the_service_is_open(monkeypatch):
+    monkeypatch.delenv("CHEM_API_KEY", raising=False)
+    assert client.get("/groups").status_code == 200
+
+
+def test_with_a_key_configured_only_callers_that_send_it_get_in(monkeypatch):
+    monkeypatch.setenv("CHEM_API_KEY", "s3cret")
+    for path in ("/groups", "/molecule?smiles=CCO", "/highlight?smiles=CCO&group_id=hydroxyl"):
+        assert client.get(path).status_code == 401, path
+        assert client.get(path, headers={"x-api-key": "wrong"}).status_code == 401, path
+        assert client.get(path, headers={"x-api-key": "s3cret"}).status_code == 200, path
+    # The host's health check needs no key.
+    assert client.get("/health").status_code == 200

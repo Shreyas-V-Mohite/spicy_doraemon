@@ -13,7 +13,7 @@ A live organic-chemistry classroom assistant. Students ask questions during a le
 | Transcription | Chrome's speech recognition (audio goes to Google), kept running by the professor page even in Present mode; text only is stored; the professor can edit or delete lines (answers can quote them); students see a notice while it is on |
 | Retrieval | Convex native vector index (`lessonChunks.by_embedding`, filtered by `courseId`). Embeddings: Voyage `voyage-4-lite`, 1024 dims. Keys made in MongoDB Atlas (`al-…`) use `ai.mongodb.com`; the client picks the endpoint from the key prefix |
 | Answer generation | Claude (`claude-sonnet-5-5`, structured output, thinking off, low effort, 10s timeout) writes 2-3 sentences plus quotes. The server checks every quote appears word for word in the passage it names. A failed check means "not covered", never an unverified answer |
-| Similar questions | Grouped per session by embedding similarity (>= 0.88, strict on purpose: a missed merge costs little, a false one hides a question); counted by distinct students; the professor can split a question out; a near-identical question (>= 0.97) reuses a verified answer. Thresholds come from a small sample and need tuning on real questions |
+| Similar questions | Grouped per session by embedding similarity (≥ 0.90, strict on purpose: a missed merge costs little, a false one hides a question); counted by distinct students; the professor can split a question out; a near-identical question (>= 0.97) reuses a verified answer. Thresholds were measured with `scripts/eval.mjs` on a synthetic lesson (16 covered and 13 uncovered questions: all 16 answered with the right section, all 13 refused); re-run it on a real lesson |
 | Memory | Every question and answer is stored. Each answer's prompt gets the lecture topic, what is on the class screen, and the **asking student's own** earlier Q&As (a student can ask at most 20, so all of them fit). Other students' questions are never put in a prompt, so an answer can't mention a classmate's question. This context only helps interpret words like "that"; every fact and quote must still come from the passages |
 | Follow-ups | A question like "why does that happen?" (detected by a small rule: very short, refers back, or starts with "and / what about / why not") is also searched with the previous question and the screen added, and is never grouped or answered from another student's answer |
 | Not covered | Student sees "Your lesson doesn't cover this. Your professor has been notified." The professor's queue pins these first, with the reason |
@@ -57,6 +57,9 @@ A live organic-chemistry classroom assistant. Students ask questions during a le
 │       ├── views/           # Home, ProfessorStart, CoursePage, LessonForm, Professor,
 │       │                    # Stage, StageControls, SharedAnswerCard, TranscriptPanel, Student
 │       └── transcribe/      # Transcriber interface, Web Speech implementation, hook
+├── scripts/                 # tunnel, preflight, demo seed, threshold evaluation (eval.mjs + eval-set.json)
+├── docs/                    # deploy.md, demo-script.md
+├── render.yaml, vercel.json # host configs (services/chem/Dockerfile builds the chemistry service)
 ├── packages/hand-gesture/   # webcam + MediaPipe + gestures -> commands; ViewMotion applies them to our 3Dmol viewer
 ├── services/chem/           # FastAPI: /molecule, /highlight (name or SMILES), /groups; 20 RDKit SMARTS groups
 └── samples/functional-groups.md   # sample lesson for trying the system
@@ -84,9 +87,9 @@ Student submits -> question + pending answer saved, answer action scheduled
   0. load memory: topic, class screen, this student's earlier Q&As
   1. embed the question once (Voyage, "query"); a follow-up also embeds question + context
   1a. (lecture) the last two minutes of this session's transcript are added as an always-on passage
-  1b. search this session's earlier questions: >= 0.88 similar -> same group (label written by
+  1b. search this session's earlier questions: ≥ 0.90 similar -> same group (label written by
       Claude once two students share it); >= 0.97 and its answer is clean and every quote still exists in the lesson/transcript -> copy it
-  2. vector search the course's passages; below score 0.25 -> not covered (no Claude call)
+  2. vector search the course's passages; below score 0.20 -> not covered (no Claude call)
   3. Claude answers from the passages with exact quotes (retry once on a fast failure)
   4. verify every quote -> answered | not covered
   Claude slow -> closest passage verbatim (fallback); search fails -> failed (professor flagged)
@@ -95,9 +98,9 @@ Student sees the result live; professor sees flags first in the queue
 
 ## Status
 
-Built and tested: hand-gesture control of the stage (logic and wiring tested without a camera; real hands and lighting not yet tried), session memory for follow-ups, the stage rework (any molecule by name or SMILES, 20 auto-detected groups, display styles, server-verified sharing, shareable answers), live lecture transcription (editable lines, chunk search across sessions, recent window, lesson-wins conflict handling), similar-question grouping (distinct-student counts, labels, split, group "mark answered", answer reuse, the students' classmates hint), courses and professor auth, lesson upload and editing with embeddings, retrieval, the answer pipeline with quote verification, limits, the merged professor page with Present mode and QR, student answers, the chemistry service, molecule preview and sharing, vote reset.
+Built and tested: deployment preparation (a tested container, optional shared key for the chemistry service, Render and Vercel configs, tunnel/preflight/seed scripts, deploy guide and demo script), measured thresholds, hand-gesture control of the stage (logic and wiring tested without a camera; real hands and lighting not yet tried), session memory for follow-ups, the stage rework (any molecule by name or SMILES, 20 auto-detected groups, display styles, server-verified sharing, shareable answers), live lecture transcription (editable lines, chunk search across sessions, recent window, lesson-wins conflict handling), similar-question grouping (distinct-student counts, labels, split, group "mark answered", answer reuse, the students' classmates hint), courses and professor auth, lesson upload and editing with embeddings, retrieval, the answer pipeline with quote verification, limits, the merged professor page with Present mode and QR, student answers, the chemistry service, molecule preview and sharing, vote reset.
 
-Planned next: hosting (a fixed home for the chemistry service, frontend hosting so students can open the QR code, a production Convex deployment), tuning the thresholds on real classroom questions, and trying the hand gestures with a real camera.
+Planned next: actually deploying (the configs, container, scripts and docs are ready: `docs/deploy.md`), re-running `scripts/eval.mjs` on a real lesson and real questions, and trying the hand gestures with a real camera and real lighting.
 
 Dropped: the private copilot, concept cards, the understanding check, voice commands, and the Droid observability agent (Factory's service was unavailable). Answer timings are stored on each answer instead.
 

@@ -9,6 +9,7 @@ const CHEM_ERRORS: Record<string, string> = {
   molecule_unparsable: "That isn't a valid molecule",
   molecule_too_large: "That molecule is too large to draw",
   embedding_failed: "Couldn't build a 3D structure for that molecule",
+  unauthorized: "The chemistry service rejected our key",
   unknown_group: "Unsupported functional group",
   group_not_in_molecule: "Can't verify: that group isn't in this molecule",
   pubchem_unavailable: "PubChem is unavailable right now",
@@ -55,9 +56,14 @@ async function callChem(path: string, params: Record<string, string>): Promise<u
   const url = new URL(path, base);
   for (const [k, val] of Object.entries(params)) url.searchParams.set(k, val);
 
+  // A hosted chemistry service can require a shared secret.
+  const key = process.env.CHEM_API_KEY;
   let res: Response;
   try {
-    res = await fetch(url, { signal: AbortSignal.timeout(CHEM_TIMEOUT_MS) });
+    res = await fetch(url, {
+      headers: key ? { "x-api-key": key } : undefined,
+      signal: AbortSignal.timeout(CHEM_TIMEOUT_MS),
+    });
   } catch {
     throw new ConvexError("Chemistry service is unreachable");
   }

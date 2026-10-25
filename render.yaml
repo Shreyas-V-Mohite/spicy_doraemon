@@ -1,0 +1,14 @@
+# Render Blueprint for the chemistry service (see docs/deploy.md).
+# The free plan sleeps when idle and takes about a minute to wake: use a paid
+# instance, or open the service a few minutes before a demo.
+services:
+  - type: web
+    name: spicy-chem
+    runtime: docker
+    rootDir: services/chem
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      # Shared secret: copy this value into Convex as CHEM_API_KEY.
+      - key: CHEM_API_KEY
+        generateValue: true

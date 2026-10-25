@@ -13,9 +13,12 @@ import { mergePassages, searchCourse, type Passage } from "./retrieval";
 
 const MODEL = "claude-sonnet-5-5";
 const CLAUDE_TIMEOUT_MS = 10000;
-// Passages scoring below this never reach Claude. Tuned on a small sample
-// lesson (covered questions scored 0.41-0.65, unrelated ones under 0.1).
-const RETRIEVAL_FLOOR = 0.25;
+// Passages scoring below this never reach Claude. Measured with
+// scripts/eval.mjs on a synthetic lesson: questions the lesson covers had a
+// best score of 0.24-0.71, questions unrelated to chemistry topped out at
+// 0.22. Wrongly refusing a covered question is worse than one extra Claude
+// call, so the floor sits just under the weakest covered question.
+const RETRIEVAL_FLOOR = 0.2;
 const PASSAGES_FOR_CLAUDE = 6;
 // The last stretch of the live lecture is always shown to Claude, even
 // before it has been embedded.
