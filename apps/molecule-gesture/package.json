@@ -1,0 +1,46 @@
+{
+  "name": "molecule-gesture",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b && tsc --noEmit -p spacetimedb",
+    "preview": "vite preview",
+    "models": "node scripts/fetch-models.mjs",
+    "molecules": "tsx scripts/fetch-molecule-pack.ts",
+    "voice:server": "tsx server/stt-proxy.ts",
+    "test": "tsx --test tests/gestures.test.ts tests/hands.test.ts tests/view.test.ts tests/voice.test.ts tests/stt.test.ts",
+    "test:inference": "tsx scripts/test-inference.ts",
+    "test:e2e": "tsx scripts/make-fake-webcam.ts node_modules/.tmp/fake-webcam.y4m && tsx scripts/make-fake-webcam.ts node_modules/.tmp/crowd.y4m --crowd && tsx scripts/e2e.ts node_modules/.tmp/fake-webcam.y4m --crowd=node_modules/.tmp/crowd.y4m",
+    "stdb:start": "spacetime start",
+    "stdb:publish": "spacetime publish --server local --module-path spacetimedb molecule-gesture -y",
+    "stdb:generate": "spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb -y",
+    "stdb:reset": "spacetime publish --server local --module-path spacetimedb molecule-gesture --delete-data -y"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^1.1.0",
+    "@moss-dev/moss-web": "^1.7.0",
+    "3dmol": "2.5",
+    "onnxruntime-web": "1.23",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "spacetimedb": "^2.13.0",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@moss-js/moss": "^1.21.0",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/ws": "^8.18.2",
+    "@vitejs/plugin-react": "^6.1.2",
+    "jpeg-js": "^0.4.4",
+    "onnxruntime-node": "1.23",
+    "playwright-core": "1.56",
+    "tsx": "^4.23.15",
+    "typescript": "5.9",
+    "vite": "^8.3.5"
+  }
+}

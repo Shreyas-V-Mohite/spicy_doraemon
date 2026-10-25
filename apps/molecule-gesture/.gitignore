@@ -1,0 +1,11 @@
+node_modules
+dist
+*.local
+.env
+spacetimedb/node_modules
+spacetimedb/dist
+public/models/*.onnx
+!public/models/rtmpose-m-hand-int8.onnx
+public/ort/
+public/models/*.task
+public/mediapipe/
