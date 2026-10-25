@@ -2,6 +2,7 @@ import { GestureMotionMapper, type MapperConfig, type MapperStatus } from './Ges
 import { GestureRecognizer, type RecognizerConfig, type RecognizerOutput } from './GestureRecognizer';
 import { KeypointSmoother } from './KeypointSmoother';
 import { HAND_SLOTS, HandSelector } from './HandSelector';
+import { SnapDetector } from './SnapDetector';
 import {
   CommandEmitter,
   HandKp,
@@ -65,6 +66,7 @@ interface HandTrack {
   smoother: KeypointSmoother;
   recognizer: GestureRecognizer;
   mapper: GestureMotionMapper;
+  snap: SnapDetector;
 }
 
 export type SnapshotListener = (s: TrackingSnapshot) => void;
@@ -100,6 +102,7 @@ export class HandGestureController implements GestureController {
       smoother: new KeypointSmoother(),
       recognizer: new GestureRecognizer(opts.recognizer),
       mapper: new GestureMotionMapper(opts.mapper),
+      snap: new SnapDetector(),
     }));
     this.snapshot = {
       phase: 'idle',
@@ -167,6 +170,7 @@ export class HandGestureController implements GestureController {
     this.tracks.forEach((tr) => {
       tr.recognizer.reset();
       tr.smoother.reset();
+      tr.snap.reset();
     });
     this.selector.reset();
     this.commands.emit({ type: 'STOP' });
@@ -240,10 +244,18 @@ export class HandGestureController implements GestureController {
         this.emitAll(tr.mapper.release(), slot);
         tr.smoother.reset();
         tr.recognizer.reset();
+        tr.snap.reset();
       }
-      const f = tr.smoother.apply({ ...raw, hand: pick?.hand ?? null, hands: undefined });
+      const rawHand: HandFrame = { ...raw, hand: pick?.hand ?? null, hands: undefined };
+      // A snap lasts a frame or two: read it from the raw landmarks, before smoothing.
+      const snapped = tr.snap.update(rawHand);
+      const f = tr.smoother.apply(rawHand);
       const rec = tr.recognizer.update(f);
-      if (this.snapshot.commandsEnabled) this.emitAll(tr.mapper.update(f, rec), slot, palmOf(f, tr.mapper.config.mirror));
+      if (this.snapshot.commandsEnabled) {
+        const palm = palmOf(f, tr.mapper.config.mirror);
+        this.emitAll(tr.mapper.update(f, rec), slot, palm);
+        if (snapped) this.emitAll([{ type: 'SNAP' }], slot, palm);
+      }
       if (f.hand) hands.push({ slot, hand: f.hand, recognizer: rec, mapper: tr.mapper.status(rec.posture) });
     }
     // Primary (the biggest hand) first.

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { HandGestureController, TrackingSnapshot } from '../gestures/HandGestureController';
 import type { MotionMode } from '../gestures/GestureMotionMapper';
 import type { RenderStyle } from '../viewer/MoleculeViewerAdapter';
-import { BUILTIN_MOLECULES } from '../molecules/registry';
+import { DWELL_MS } from './MoleculePicker';
 
 const MODE_SHORT: Record<MotionMode, string> = {
   ZOOM: 'Resize',
@@ -23,9 +23,11 @@ const POSTURE_LABEL: Record<string, string> = {
 export interface DockProps {
   hand: HandGestureController | null;
   canEdit: boolean;
-  addMolecule(id: string): void;
-  /** Look a molecule up by name (bundled pack, then PubChem) and add it. */
-  addByName(name: string): Promise<void>;
+  /** The molecule picker (also opened by a finger snap). */
+  pickerOpen: boolean;
+  togglePicker(): void;
+  /** An index fingertip is resting on the ＋ Molecule button (it fills, then opens the picker). */
+  addAiming: boolean;
   style: RenderStyle;
   setStyle(s: RenderStyle): void;
   showLandmarks: boolean;
@@ -38,8 +40,8 @@ export interface DockProps {
 
 /**
  * Everything the teacher needs in one slim bar at the bottom centre, so the
- * camera image and the molecules stay uncovered: the camera / hand mode, and
- * two small menus (settings, help) that open only on demand.
+ * camera image and the molecules stay uncovered: the camera / hand mode, the
+ * molecule picker, and two small menus (settings, help) that open only on demand.
  */
 export function Dock(props: DockProps) {
   const { hand } = props;
@@ -94,20 +96,6 @@ export function Dock(props: DockProps) {
     <div className="dock-wrap" ref={wrapRef}>
       {menu === 'settings' && (
         <div className="dock-menu" role="dialog" aria-label="Settings">
-          {props.canEdit && (
-            <label className="field">
-              <span>Add a molecule</span>
-              <select value="" onChange={(e) => e.target.value && props.addMolecule(e.target.value)}>
-                <option value="">Choose…</option>
-                {BUILTIN_MOLECULES.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.formula})
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {props.canEdit && <TypeMolecule addByName={props.addByName} />}
           <label className="field">
             <span>Style</span>
             <select value={props.style} onChange={(e) => props.setStyle(e.target.value as RenderStyle)}>
@@ -132,7 +120,7 @@ export function Dock(props: DockProps) {
       )}
       {menu === 'help' && (
         <div className="dock-menu dock-menu--help" role="dialog" aria-label="How to control">
-          <p><b>⚙ Add</b> Settings → Add a molecule, or type any name</p>
+          <p><b>🫰 Add</b> snap your fingers, or point at ＋ Molecule for a moment (or click it); then point at a molecule for a moment, or click it</p>
           <p><b>☝️ Move</b> point your index finger at a molecule and carry it</p>
           <p><b>🗑️ Delete</b> carry it onto the trash (bottom left) — it disappears right away</p>
           <p><b>✋ Resize</b> open / close your fingers — open all the way and repeat (open, close, open…) to keep growing. Stop for ½ s and the size locks</p>
@@ -188,6 +176,19 @@ export function Dock(props: DockProps) {
         )}
 
         <span className="dock__sep" />
+        {props.canEdit && (
+          <button
+            className={`dock__cam dock__add ${props.pickerOpen ? 'is-on' : ''} ${props.addAiming ? 'is-aiming' : ''}`}
+            onClick={props.togglePicker}
+            aria-pressed={props.pickerOpen}
+            data-gesture-button="add-molecule"
+            style={{ ['--dwell' as string]: `${DWELL_MS}ms` }}
+            title="Choose a molecule: click, point at it with your index finger, or snap your fingers"
+          >
+            ＋ Molecule
+            <span className="dock__add-progress" aria-hidden />
+          </button>
+        )}
         <button className={`dock__icon ${menu === 'settings' ? 'is-on' : ''}`} onClick={() => setMenu(menu === 'settings' ? null : 'settings')} aria-label="Settings">
           ⚙
         </button>
@@ -207,24 +208,5 @@ function Toggle({ label, checked, onChange, disabled }: { label: string; checked
       <span className="switch__track" />
       <span>{label}</span>
     </label>
-  );
-}
-
-function TypeMolecule({ addByName }: { addByName(name: string): Promise<void> }) {
-  const [typed, setTyped] = useState('');
-  return (
-    <form
-      className="field"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const text = typed.trim();
-        if (!text) return;
-        void addByName(text);
-        setTyped('');
-      }}
-    >
-      <span>Type a name (any molecule)</span>
-      <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="e.g. ibuprofen" />
-    </form>
   );
 }

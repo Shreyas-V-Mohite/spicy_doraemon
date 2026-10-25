@@ -11,7 +11,7 @@
     "models": "node scripts/fetch-models.mjs",
     "molecules": "tsx scripts/fetch-molecule-pack.ts",
     "voice:server": "tsx server/stt-proxy.ts",
-    "test": "tsx --test tests/gestures.test.ts tests/hands.test.ts tests/view.test.ts tests/voice.test.ts tests/stt.test.ts",
+    "test": "tsx --test tests/gestures.test.ts tests/snap.test.ts tests/hands.test.ts tests/view.test.ts tests/voice.test.ts tests/stt.test.ts",
     "test:inference": "tsx scripts/test-inference.ts",
     "test:e2e": "tsx scripts/make-fake-webcam.ts node_modules/.tmp/fake-webcam.y4m && tsx scripts/make-fake-webcam.ts node_modules/.tmp/crowd.y4m --crowd && tsx scripts/e2e.ts node_modules/.tmp/fake-webcam.y4m --crowd=node_modules/.tmp/crowd.y4m",
     "stdb:start": "spacetime start",

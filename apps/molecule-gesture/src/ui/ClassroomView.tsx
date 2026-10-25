@@ -8,7 +8,9 @@ import { useHandController, useTrackingValue } from './useHandController';
 import { WebcamBackdrop } from './WebcamBackdrop';
 import { ManualControls } from './ManualControls';
 import { Dock } from './Dock';
-import { MoleculeScene, type MoleculeSceneHandle, type PlannedSpot } from '../scene/MoleculeScene';
+import { MoleculeScene, type MoleculeSceneHandle } from '../scene/MoleculeScene';
+import { DWELL_MS, MoleculePicker, type MoleculePickerHandle } from './MoleculePicker';
+import { coverPointToPlacement } from '../viewer/MoleculeViewerAdapter';
 import { useLocalScene } from '../scene/useLocalScene';
 import { MAX_SCENE_MOLECULES } from '../scene/types';
 import type { ClassroomSync } from '../sync/useClassroomSync';
@@ -25,17 +27,6 @@ export interface ClassroomViewProps {
   extraControllers?: GestureController[];
 }
 
-/**
- * Molecules on stage as soon as a class (or solo session) opens, side by side:
- * the lesson's ethanol, acetic acid and aspirin. All three load without the
- * network (bundled files / the molecule pack).
- */
-const STARTUP_MOLECULES: PlannedSpot[] = [
-  { moleculeId: 'builtin:ethanol', x: -0.3, y: 0, scale: 0.45 },
-  { moleculeId: 'pubchem:176', x: 0, y: 0, scale: 0.45 }, // acetic acid
-  { moleculeId: 'builtin:aspirin', x: 0.3, y: 0, scale: 0.45 },
-];
-
 const TEACHER_ACTIVITY: Record<string, string> = {
   ROTATE: 'rotating a molecule',
   MOVE: 'moving a molecule',
@@ -48,6 +39,11 @@ export function ClassroomView({ role, roomId, name, sync, extraControllers }: Cl
   const localScene = useLocalScene();
   const scene = sync ? sync.scene : localScene;
   const sceneRef = useRef<MoleculeSceneHandle>(null);
+  const stageRef = useRef<HTMLElement>(null);
+  const pickerRef = useRef<MoleculePickerHandle>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerOpenRef = useRef(false);
+  pickerOpenRef.current = pickerOpen;
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [style, setStyle] = useState<RenderStyle>('ballstick');
   const [following, setFollowing] = useState(true);
@@ -67,14 +63,73 @@ export function ClassroomView({ role, roomId, name, sync, extraControllers }: Cl
 
   const followingRef = useRef(studentFollowing);
   followingRef.current = studentFollowing;
+  const canEditRef = useRef(canEdit);
+  canEditRef.current = canEdit;
 
   // Every input source drives the scene: PLACE grabs the molecule under that
-  // hand's fingertip, everything else goes to the molecule that hand holds
-  // (else the selected one).
+  // hand's fingertip, everything else goes to the molecule nearest that hand's
+  // palm (keys: the selected one). A snap opens/closes the molecule picker;
+  // while it is open the fingertip aims at it and molecules stay put.
   const route = useCallback((cmd: GestureCommand, source?: CommandSource) => {
     if (followingRef.current) return; // follow mode: the teacher drives these views
+    if (cmd.type === 'SNAP') {
+      if (canEditRef.current) setPickerOpen((open) => !open);
+      return;
+    }
+    if (pickerOpenRef.current) {
+      if (cmd.type === 'PLACE') pickerRef.current?.point(fingertipOnPage(cmd));
+      else if (cmd.type === 'STOP') pickerRef.current?.point(null);
+      return;
+    }
+    // A fingertip resting on ＋ Molecule presses it (unless that hand is carrying a molecule).
+    if (cmd.type === 'PLACE' && canEditRef.current && !sceneRef.current?.holding(source)) {
+      const over = overAddButton(fingertipOnPage(cmd));
+      aimAdd(over);
+      if (over) return;
+    } else if (cmd.type === 'STOP') {
+      aimAdd(false);
+    }
     sceneRef.current?.applyCommand(cmd, source);
   }, []);
+
+  // ＋ Molecule by pointing: hold the fingertip on it for DWELL_MS.
+  const [addAiming, setAddAiming] = useState(false);
+  const addTimer = useRef<number | null>(null);
+  const aimAdd = (on: boolean) => {
+    if (on === (addTimer.current !== null)) return;
+    if (on) {
+      addTimer.current = window.setTimeout(() => {
+        addTimer.current = null;
+        setAddAiming(false);
+        setPickerOpen(true);
+      }, DWELL_MS);
+    } else {
+      window.clearTimeout(addTimer.current!);
+      addTimer.current = null;
+    }
+    setAddAiming(on);
+  };
+  const overAddButton = (at: { x: number; y: number } | null) => {
+    const r = document.querySelector('[data-gesture-button="add-molecule"]')?.getBoundingClientRect();
+    const pad = 10; // a little slack: a fingertip is not a mouse pointer
+    return !!at && !!r && at.x >= r.left - pad && at.x <= r.right + pad && at.y >= r.top - pad && at.y <= r.bottom + pad;
+  };
+
+  /** A fingertip (camera-frame point, as displayed) → page pixels, through the backdrop's object-fit: cover. */
+  const fingertipOnPage = (cmd: { x: number; y: number; frameAspect: number }) => {
+    const r = stageRef.current?.getBoundingClientRect();
+    if (!r) return null;
+    const p = coverPointToPlacement(cmd.x, cmd.y, cmd.frameAspect, r.width, r.height);
+    return { x: r.left + r.width / 2 + p.x * r.width, y: r.top + r.height / 2 + p.y * r.width };
+  };
+
+  // Esc closes the picker.
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setPickerOpen(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pickerOpen]);
 
   useEffect(() => {
     const controllers: GestureController[] = [manual, ...(hand ? [hand] : []), ...(extraControllers ?? [])];
@@ -105,7 +160,7 @@ export function ClassroomView({ role, roomId, name, sync, extraControllers }: Cl
     window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 2600);
   };
 
-  // ---- molecules are only ever added (start-up, ⚙ menu), removed via the trash --
+  // ---- molecules are only ever added (picker), removed via the trash ----------
   const addMolecule = (id: string) => {
     if (!canEdit) return;
     if (scene.items.length >= MAX_SCENE_MOLECULES) {
@@ -115,7 +170,7 @@ export function ClassroomView({ role, roomId, name, sync, extraControllers }: Cl
     scene.add(id);
   };
 
-  /** ⚙ → Type a name: look it up (bundled pack first, then PubChem) and add it. */
+  /** Picker → another molecule by name: look it up (bundled pack first, then PubChem) and add it. */
   const addByName = async (name: string) => {
     try {
       const hit = await findMoleculeByName(name);
@@ -125,17 +180,10 @@ export function ClassroomView({ role, roomId, name, sync, extraControllers }: Cl
     }
   };
 
-  // Start-up: put the lesson's molecules on stage, once, when the stage is
-  // empty. In a synced room wait until the room's molecules have loaded, so a
-  // teacher who reloads mid-lesson keeps what is there.
-  const seeded = useRef(false);
-  useEffect(() => {
-    if (seeded.current || !canEdit || (sync && !sync.ready)) return;
-    seeded.current = true;
-    if (scene.items.length) return;
-    sceneRef.current?.planLayout(STARTUP_MOLECULES);
-    for (const m of STARTUP_MOLECULES) scene.add(m.moleculeId);
-  }, [canEdit, sync, scene]);
+  const pick = (id: string) => {
+    addMolecule(id);
+    setPickerOpen(false);
+  };
 
   const activeItem = scene.items.find((i) => i.key === activeKey) ?? null;
   const activeMolecule = useResolved(activeItem?.moleculeId);
@@ -151,7 +199,8 @@ export function ClassroomView({ role, roomId, name, sync, extraControllers }: Cl
     if (!import.meta.env.DEV) return;
     (window as unknown as { __mgl: unknown }).__mgl = {
       add: (moleculeId: string) => addMolecule(moleculeId),
-      command: (cmd: GestureCommand, source?: CommandSource) => sceneRef.current?.applyCommand(cmd, source),
+      command: (cmd: GestureCommand, source?: CommandSource) => route(cmd, source),
+      pickerOpen: () => pickerOpenRef.current,
       addByName: (name: string) => addByName(name),
       scene: () => sceneRef.current?.debug() ?? [],
       items: () => scene.items.map((i) => ({ key: i.key, moleculeId: i.moleculeId, seq: i.seq, gesture: i.gesture })),
@@ -181,7 +230,7 @@ export function ClassroomView({ role, roomId, name, sync, extraControllers }: Cl
     <div className={`classroom role-${role}${handRunning ? ' has-camera' : ''}`}>
       <TopBar role={role} roomId={roomId} name={name} sync={sync} />
 
-      <main className="stage">
+      <main className="stage" ref={stageRef}>
         {!isStudent && <WebcamBackdrop controller={hand} showLandmarks={showLandmarks} />}
         <MoleculeScene
           ref={sceneRef}
@@ -206,18 +255,22 @@ export function ClassroomView({ role, roomId, name, sync, extraControllers }: Cl
           {scene.lastError && <p className="error-text">{scene.lastError}</p>}
         </div>
 
-        {count === 0 && (
+        {count === 0 && !pickerOpen && (
           <div className="snap-hint">
             {isStudent ? (
               <strong>Waiting for your teacher to add a molecule…</strong>
             ) : (
               <>
-                <span className="snap-hint__icon">⚙</span>
-                <strong>No molecules on stage</strong>
-                <span>Add one from ⚙ → Add a molecule (or type a name)</span>
+                <span className="snap-hint__icon">🫰</span>
+                <strong>Snap your fingers to choose a molecule</strong>
+                <span>or click ＋ Molecule below</span>
               </>
             )}
           </div>
+        )}
+
+        {pickerOpen && canEdit && (
+          <MoleculePicker ref={pickerRef} onPick={pick} onClose={() => setPickerOpen(false)} addByName={addByName} />
         )}
 
         {isStudent && (
@@ -262,9 +315,10 @@ export function ClassroomView({ role, roomId, name, sync, extraControllers }: Cl
         {!isStudent && (
           <Dock
             hand={hand}
-            addByName={addByName}
             canEdit={canEdit}
-            addMolecule={addMolecule}
+            pickerOpen={pickerOpen}
+            togglePicker={() => setPickerOpen((open) => !open)}
+            addAiming={addAiming}
             style={style}
             setStyle={setStyle}
             showLandmarks={showLandmarks}

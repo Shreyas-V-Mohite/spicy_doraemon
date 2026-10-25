@@ -20,6 +20,7 @@
  *    backdrop's object-fit: cover; if the pointer is on the molecule, the
  *    molecule is grabbed and follows it until a STOP.
  *  - VISIBILITY: show or hide the molecule.
+ *  - SNAP: a finger snap (opens / closes the molecule picker); molecules ignore it.
  */
 export type GestureCommand =
   | { type: 'ROTATE'; dx: number; dy: number; dz?: number }
@@ -28,6 +29,7 @@ export type GestureCommand =
   | { type: 'PAN'; dx: number; dy: number }
   | { type: 'PLACE'; x: number; y: number; frameAspect: number }
   | { type: 'VISIBILITY'; visible: boolean }
+  | { type: 'SNAP' }
   | { type: 'STOP' }
   | { type: 'RESET' };
 

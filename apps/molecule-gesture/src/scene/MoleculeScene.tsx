@@ -28,12 +28,8 @@ export interface MoleculeSceneHandle {
    */
   applyCommand(cmd: GestureCommand, source?: CommandSource): void;
   activeKey(): string | null;
-  /**
-   * Where the next molecules with these IDs should appear (viewer-widths from
-   * the centre, and size relative to fitting the screen), whatever order they
-   * finish loading in.
-   */
-  planLayout(spots: PlannedSpot[]): void;
+  /** Is this hand (or the mouse, without a source) carrying a molecule right now? */
+  holding(source?: CommandSource): boolean;
   /** Debug/test snapshot. */
   debug(): {
     key: string;
@@ -44,13 +40,6 @@ export interface MoleculeSceneHandle {
     loaded: string | null;
     fit: ReturnType<MoleculeViewerAdapter['fitInfo']> | null;
   }[];
-}
-
-export interface PlannedSpot {
-  moleculeId: string;
-  x: number;
-  y: number;
-  scale: number;
 }
 
 interface Slot {
@@ -135,7 +124,6 @@ export const MoleculeScene = forwardRef<MoleculeSceneHandle, MoleculeSceneProps>
   const owner = useRef(new Map<string, { src: number; at: number }>());
   const activity = useRef(new Map<string, { label: string; at: number }>());
   const leavingRef = useRef(new Set<string>());
-  const plan = useRef<PlannedSpot[]>([]);
   const [leaving, setLeaving] = useState<Set<string>>(new Set());
 
   const setActive = useCallback(
@@ -259,6 +247,8 @@ export const MoleculeScene = forwardRef<MoleculeSceneHandle, MoleculeSceneProps>
       const now = performance.now();
       const adapterOf = (key: string) => slots.current.get(key)?.adapter;
 
+      if (cmd.type === 'SNAP') return; // for the molecule picker, not for molecules
+
       if (cmd.type === 'PLACE') {
         const p = coverPointToPlacement(cmd.x, cmd.y, cmd.frameAspect, w, h);
         let key = grabs.current.get(src);
@@ -342,9 +332,7 @@ export const MoleculeScene = forwardRef<MoleculeSceneHandle, MoleculeSceneProps>
     () => ({
       applyCommand,
       activeKey: () => activeRef.current,
-      planLayout: (spots) => {
-        plan.current.push(...spots);
-      },
+      holding: (source) => grabs.current.has(source?.hand ?? KEYS),
       debug: () =>
         itemsRef.current.map((it) => {
           const s = slots.current.get(it.key);
@@ -374,13 +362,6 @@ export const MoleculeScene = forwardRef<MoleculeSceneHandle, MoleculeSceneProps>
       s.laidOut = true;
       if (it?.view) {
         a.setView(it.view); // teacher reloaded mid-lesson
-        return;
-      }
-      // A spot planned in advance (the molecules shown at start-up).
-      const planned = plan.current.findIndex((p) => p.moleculeId === m.id);
-      if (planned >= 0) {
-        const [p] = plan.current.splice(planned, 1);
-        a.layOut(p.scale, p.x, p.y);
         return;
       }
       // Pick the free spot farthest from the other (already placed) molecules.

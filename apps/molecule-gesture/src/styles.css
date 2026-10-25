@@ -488,3 +488,41 @@ kbd {
   .dock-wrap { max-width: calc(100% - 100px); }
   .dock__caption { min-width: 60px; max-width: 140px; }
 }
+
+/* Molecule picker (snap or ＋ Molecule): centred over the stage, tiles big enough to aim at with a fingertip. */
+.picker {
+  position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); z-index: 25;
+  width: min(760px, calc(100% - 32px)); display: grid; gap: 14px;
+  background: rgba(10, 12, 26, 0.88); border: 1px solid var(--border-strong); border-radius: 18px;
+  padding: 16px 18px 18px; box-shadow: var(--shadow); backdrop-filter: blur(10px);
+  animation: picker-in 0.18s ease-out;
+}
+@keyframes picker-in { from { opacity: 0; transform: translate(-50%, -46%) scale(0.97); } }
+.picker__head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.picker__head strong { font-size: 17px; }
+.picker__head span { color: var(--muted); font-size: 13px; }
+.picker__close { margin-left: auto; background: none; border: 0; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; }
+.picker__grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.picker__tile {
+  position: relative; overflow: hidden; display: grid; gap: 4px; justify-items: center; align-content: center;
+  min-height: 92px; padding: 12px 8px; border-radius: 12px; cursor: pointer; color: var(--text);
+  background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border);
+  transition: background 0.12s, border-color 0.12s, transform 0.12s;
+}
+.picker__tile:hover, .picker__tile.is-aiming { background: rgba(139, 124, 255, 0.18); border-color: rgba(139, 124, 255, 0.7); transform: translateY(-1px); }
+.picker__tile:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+.picker__name { font-weight: 600; font-size: 15px; }
+.picker__formula { font-family: var(--mono); font-size: 13px; color: var(--blue); }
+/* Fills while a fingertip rests on the tile; full = chosen. */
+.picker__progress { position: absolute; left: 0; bottom: 0; height: 4px; width: 0; background: var(--accent-grad); }
+.picker__tile.is-aiming .picker__progress { animation: picker-dwell var(--dwell, 700ms) linear forwards; }
+@keyframes picker-dwell { to { width: 100%; } }
+.picker__other input { width: 100%; background: rgba(5, 7, 16, 0.6); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; color: var(--text); }
+@media (max-width: 640px) { .picker__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (prefers-reduced-motion: reduce) { .picker { animation: none; } }
+.dock__add { white-space: nowrap; }
+.dock__add { position: relative; overflow: hidden; }
+.dock__add.is-aiming { box-shadow: 0 0 0 2px rgba(139, 124, 255, 0.8); }
+/* Fills while an index fingertip rests on the button; full = pressed. */
+.dock__add-progress { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: #fff; opacity: 0.85; }
+.dock__add.is-aiming .dock__add-progress { animation: picker-dwell var(--dwell, 700ms) linear forwards; }

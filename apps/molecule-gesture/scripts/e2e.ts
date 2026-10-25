@@ -5,8 +5,8 @@
  * The teacher's webcam is Chrome's fake capture device fed with a Y4M built
  * from a real hand photo (scripts/make-fake-webcam.ts), so the hand pipeline
  * runs for real: getUserMedia → MediaPipe → gestures → 3Dmol → SpacetimeDB.
- * The stage opens with the lesson's three molecules (ethanol, acetic acid,
- * aspirin); more are added through the same path as ⚙ → Type a name.
+ * The stage starts empty; molecules come from the picker, opened with a finger
+ * snap (sent as a command here) or the ＋ Molecule button.
  *
  *   npx tsx scripts/e2e.ts <fake-webcam.y4m> [screenshotDir] [--crowd=<crowd.y4m>]
  * Env: E2E_URL (default http://localhost:5173/), CHROME_PATH, E2E_TEACHER_QUERY.
@@ -143,69 +143,135 @@ async function main() {
   check('teacher connects to SpacetimeDB and owns the room', !!(await waitFor(teacher, (d) => d.isRoomTeacher && d.ready, 20000)), `room ${room}`);
   await student.goto(`${BASE}?room=${room}&role=student&name=Student%20E2E`);
   check('student joins the same room', !!(await waitFor(student, (d) => d.ready && d.participants >= 2, 20000)));
-  // --- start-up: the lesson's three molecules, side by side ----------------
-  const LESSON = ['builtin:ethanol', 'pubchem:176', 'builtin:aspirin'];
-  const three = await waitFor(teacher, (d) => loadedAll(d, 3), 15000);
+  // --- empty stage; a snap opens the molecule picker ---------------------------
+  check('the stage starts empty (nothing until the teacher picks)', (await dbg(teacher))!.scene.length === 0 && (await dbg(student))!.scene.length === 0);
+  const sb0 = (await teacher.locator('.stage').boundingBox())!;
+  const FRAME = 4 / 3;
+  /** Page point → camera-frame point (as displayed), inverting the backdrop's object-fit: cover. */
+  const toCamera = (pageX: number, pageY: number) => {
+    const w = sb0.width;
+    const h = sb0.height;
+    let dispW = w;
+    let dispH = w / FRAME;
+    if (dispH < h) {
+      dispH = h;
+      dispW = h * FRAME;
+    }
+    return { x: (pageX - sb0.x - (w - dispW) / 2) / dispW, y: (pageY - sb0.y - (h - dispH) / 2) / dispH };
+  };
+  const cmd = (c: object, source: object = { hand: 0 }) => teacher.evaluate(`window.__mgl.command(${JSON.stringify(c)}, ${JSON.stringify(source)})`);
+  const pickerOpen = () => teacher.evaluate('window.__mgl.pickerOpen()') as Promise<boolean>;
+  /** Hold an index fingertip over a picker tile for `ms` (PLACE commands, like pointing does). */
+  const pointAtTile = (name: string, ms: number) => pointAt('.picker__tile:has-text("' + name + '")', ms);
+  /** Hold an index fingertip over an element for `ms` (PLACE commands, like pointing does). */
+  const pointAt = async (selector: string, ms: number) => {
+    const b = (await teacher.locator(selector).first().boundingBox())!;
+    const end = Date.now() + ms;
+    for (let i = 0; Date.now() < end; i++) {
+      const c = toCamera(b.x + b.width / 2 + (i % 2), b.y + b.height / 2);
+      await cmd({ type: 'PLACE', x: c.x, y: c.y, frameAspect: FRAME });
+      await teacher.waitForTimeout(50);
+    }
+  };
+
+  await cmd({ type: 'SNAP' });
+  await teacher.waitForTimeout(200);
+  check('a finger snap opens the molecule picker', (await pickerOpen()) && (await teacher.locator('.picker').isVisible()));
+  await cmd({ type: 'ZOOM', factor: 2 }); // other gestures while choosing: ignored
+  await pointAtTile('Ethanol', 300); // a glance is not a choice
+  await cmd({ type: 'STOP' });
+  await teacher.waitForTimeout(500);
+  check('a brief point at a tile does not choose it', (await dbg(teacher))!.scene.length === 0 && (await pickerOpen()));
+  await pointAtTile('Ethanol', 1000); // hold the fingertip on it (0.7 s)
+  const one = await waitFor(teacher, (d) => loadedAll(d, 1), 8000);
+  check('pointing at a tile for a moment adds that molecule and closes the picker', !!one && !!byMol(one, 'builtin:ethanol') && !(await pickerOpen()));
+  await cmd({ type: 'STOP' });
+  await cmd({ type: 'SNAP' });
+  await teacher.waitForTimeout(200);
+  await cmd({ type: 'SNAP' });
+  await teacher.waitForTimeout(200);
+  check('snapping again closes it', !(await pickerOpen()) && (await dbg(teacher))!.scene.length === 1);
+  await pointAt('[data-gesture-button="add-molecule"]', 300); // a glance
+  await cmd({ type: 'STOP' });
+  await teacher.waitForTimeout(400);
+  const notYet = !(await pickerOpen());
+  await pointAt('[data-gesture-button="add-molecule"]', 1000); // hold it
+  await cmd({ type: 'STOP' });
+  check('pointing at ＋ Molecule for a moment presses it (a glance does not)', notYet && (await pickerOpen()));
+  await teacher.click('.picker__tile:has-text("Acetic acid")');
+  await waitFor(teacher, (d) => loadedAll(d, 2), 8000);
+  await teacher.click('button:has-text("＋ Molecule")');
+  await teacher.click('.picker__tile:has-text("Aspirin")');
+  const three = await waitFor(teacher, (d) => loadedAll(d, 3), 8000);
   check(
-    'the stage opens with ethanol, acetic acid and aspirin',
-    !!three && LESSON.every((id) => !!byMol(three, id)),
-    three?.scene.map((s) => s.moleculeId).join(', '),
+    'clicking works too (ethanol, acetic acid, aspirin on stage)',
+    !!three && ['builtin:ethanol', 'pubchem:176', 'builtin:aspirin'].every((id) => !!byMol(three, id)),
   );
   await teacher.waitForTimeout(800);
   const t3 = (await dbg(teacher))!;
-  const xs = LESSON.map((id) => byMol(t3, id)!.placement!);
-  const scales = LESSON.map((id) => byMol(t3, id)!.scale!);
-  check(
-    '…in a row, left to right, at the same size',
-    xs[0].x < xs[1].x - 0.2 && xs[1].x < xs[2].x - 0.2 && xs.every((p) => Math.abs(p.y) < 0.02) && Math.max(...scales) / Math.min(...scales) < 1.01,
-    xs.map((p) => p.x.toFixed(2)).join(' / '),
-  );
-  check('the last one (aspirin) is selected', byMol(t3, 'builtin:aspirin')?.key === t3.active);
+  const pl = t3.scene.map((s) => s.placement!);
+  const minGap = Math.min(...pl.flatMap((a, i) => pl.slice(i + 1).map((b) => Math.hypot(a.x - b.x, a.y - b.y))));
+  check('new molecules are placed apart (no overlap)', minGap > 0.12, `closest pair ${minGap.toFixed(2)} viewer-widths`);
+  check('the newest molecule (aspirin) is selected', byMol(t3, 'builtin:aspirin')?.key === t3.active);
   check('student sees all 3 molecules', !!(await waitFor(student, (d) => loadedAll(d, 3), 20000)));
   await teacher.reload();
   await waitFor(teacher, (d) => d.isRoomTeacher && d.ready, 20000);
   await teacher.waitForTimeout(1500);
-  check('reloading the teacher page does not add them again', (await dbg(teacher))!.scene.length === 3);
+  check('reloading the teacher page keeps the stage as it was', (await dbg(teacher))!.scene.length === 3);
 
   // --- each hand works on the molecule nearest its own palm -------------------
-  /** A hand command with that hand's palm at (x, y) in the camera frame (as displayed). */
-  const handCmd = (hand: number, x: number, cmd: object) =>
-    teacher.evaluate(`window.__mgl.command(${JSON.stringify(cmd)}, ${JSON.stringify({ hand, palm: { x, y: 0.5, frameAspect: 4 / 3 } })})`);
+  /** A hand command with that hand's palm over a molecule (its on-screen centre). */
+  const palmAt = async (id: string) => {
+    const d = (await dbg(teacher))!;
+    const p = byMol(d, id)!.placement!;
+    return toCamera(sb0.x + sb0.width / 2 + p.x * sb0.width, sb0.y + sb0.height / 2 + p.y * sb0.width);
+  };
+  const handCmd = async (hand: number, at: { x: number; y: number }, c: object) =>
+    cmd(c, { hand, palm: { x: at.x, y: at.y, frameAspect: FRAME } });
   const scaleOf = (d: Snap, id: string) => byMol(d, id)!.scale!;
-  const grew = (a: Snap, b: Snap, id: string) => scaleOf(b, id) / scaleOf(a, id);
+  const ratio = (a: Snap, b: Snap, id: string) => scaleOf(b, id) / scaleOf(a, id);
+  const unchanged = (a: Snap, b: Snap, id: string) => Math.abs(ratio(a, b, id) - 1) < 0.01;
+  const IDS = ['builtin:ethanol', 'pubchem:176', 'builtin:aspirin'];
+  const atEthanol = await palmAt('builtin:ethanol');
+  const atAspirin = await palmAt('builtin:aspirin');
   const p0 = (await dbg(teacher))!;
-  await handCmd(0, 0.2, { type: 'ZOOM', factor: 1.4 }); // palm on the left, where ethanol is
+  await handCmd(0, atEthanol, { type: 'ZOOM', factor: 1 / 1.4 });
   await teacher.waitForTimeout(400); // let the resize ease in (STOP drops what is still pending)
-  await handCmd(0, 0.2, { type: 'STOP' });
-  await teacher.waitForTimeout(500);
+  await handCmd(0, atEthanol, { type: 'STOP' });
+  await teacher.waitForTimeout(400);
   const p1 = (await dbg(teacher))!;
   check(
-    'a hand on the left resizes only the molecule nearest its palm (ethanol), not the selected one',
-    grew(p0, p1, 'builtin:ethanol') > 1.3 && Math.abs(grew(p0, p1, 'builtin:aspirin') - 1) < 0.01 && Math.abs(grew(p0, p1, 'pubchem:176') - 1) < 0.01,
-    `ethanol ×${grew(p0, p1, 'builtin:ethanol').toFixed(2)}, aspirin ×${grew(p0, p1, 'builtin:aspirin').toFixed(2)}`,
+    'a hand resizes only the molecule nearest its palm (ethanol), not the selected one',
+    ratio(p0, p1, 'builtin:ethanol') < 0.8 && unchanged(p0, p1, 'builtin:aspirin') && unchanged(p0, p1, 'pubchem:176'),
+    `ethanol ×${ratio(p0, p1, 'builtin:ethanol').toFixed(2)}, aspirin ×${ratio(p0, p1, 'builtin:aspirin').toFixed(2)}`,
   );
-  await handCmd(1, 0.8, { type: 'ZOOM', factor: 1.4 }); // the other hand, on the right
+  await handCmd(1, atAspirin, { type: 'ZOOM', factor: 1 / 1.4 });
   await teacher.waitForTimeout(400);
-  await handCmd(1, 0.8, { type: 'STOP' });
-  await teacher.waitForTimeout(500);
+  await handCmd(1, atAspirin, { type: 'STOP' });
+  await teacher.waitForTimeout(400);
   const p2 = (await dbg(teacher))!;
   check(
-    '…and a hand on the right resizes only aspirin',
-    grew(p1, p2, 'builtin:aspirin') > 1.3 && Math.abs(grew(p1, p2, 'builtin:ethanol') - 1) < 0.01,
-    `aspirin ×${grew(p1, p2, 'builtin:aspirin').toFixed(2)}`,
+    '…and the other hand, over aspirin, resizes only aspirin',
+    ratio(p1, p2, 'builtin:aspirin') < 0.8 && unchanged(p1, p2, 'builtin:ethanol') && unchanged(p1, p2, 'pubchem:176'),
+    `aspirin ×${ratio(p1, p2, 'builtin:aspirin').toFixed(2)}`,
   );
-  // Both palms near ethanol at once: the first hand has it, the second gets the next nearest.
-  await handCmd(0, 0.2, { type: 'ZOOM', factor: 1 / 1.4 });
-  await handCmd(1, 0.25, { type: 'ZOOM', factor: 1 / 1.4 });
+  // Both palms over ethanol: the first hand has it, the second takes the next nearest.
+  const others = IDS.filter((id) => id !== 'builtin:ethanol');
+  const pe = byMol(p2, 'builtin:ethanol')!.placement!;
+  const dist = (id: string) => Math.hypot(byMol(p2, id)!.placement!.x - pe.x, byMol(p2, id)!.placement!.y - pe.y);
+  const nextNearest = others.sort((a, b) => dist(a) - dist(b))[0];
+  const third = others.find((id) => id !== nextNearest)!;
+  await handCmd(0, atEthanol, { type: 'ZOOM', factor: 1 / 1.2 });
+  await handCmd(1, atEthanol, { type: 'ZOOM', factor: 1 / 1.2 });
   await teacher.waitForTimeout(400);
-  await handCmd(0, 0.2, { type: 'STOP' });
-  await handCmd(1, 0.25, { type: 'STOP' });
-  await teacher.waitForTimeout(500);
+  await handCmd(0, atEthanol, { type: 'STOP' });
+  await handCmd(1, atEthanol, { type: 'STOP' });
+  await teacher.waitForTimeout(400);
   const p3 = (await dbg(teacher))!;
   check(
     'two hands never share a molecule: the second hand takes the next nearest',
-    grew(p2, p3, 'builtin:ethanol') < 0.8 && grew(p2, p3, 'pubchem:176') < 0.8 && Math.abs(grew(p2, p3, 'builtin:aspirin') - 1) < 0.01,
-    `ethanol ×${grew(p2, p3, 'builtin:ethanol').toFixed(2)}, acetic acid ×${grew(p2, p3, 'pubchem:176').toFixed(2)}`,
+    ratio(p2, p3, 'builtin:ethanol') < 0.9 && ratio(p2, p3, nextNearest) < 0.9 && unchanged(p2, p3, third),
+    `ethanol ×${ratio(p2, p3, 'builtin:ethanol').toFixed(2)}, ${nextNearest} ×${ratio(p2, p3, nextNearest).toFixed(2)}`,
   );
   await teacher.click('.mol-chip:has-text("Aspirin")'); // select aspirin again for the key tests below
   await teacher.waitForTimeout(300);
@@ -357,6 +423,7 @@ async function main() {
     for (const x of d.scene) maxRot = Math.max(maxRot, angleDeg(preHand.scene.find((y) => y.key === x.key)?.view, x.view));
   }
   console.log('      hand panel:', seen.backend, '| infer', seen.infer, '| fps', seen.fps, '| states:', [...seen.postures].join(', '));
+  check('a moving, twisting real hand that never snaps does not open the picker', !(await pickerOpen()));
   check('camera on: molecules stay (only the trash removes them)', ((await dbg(teacher))?.scene.length ?? 0) === 2);
   check('real hand-landmark inference detects the hand', seen.maxConf > 0.5, `max confidence ${seen.maxConf.toFixed(2)}`);
   check('open hand recognised', [...seen.postures].some((p) => p.includes('open')));
