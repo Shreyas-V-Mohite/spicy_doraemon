@@ -1,10 +1,21 @@
 import { ConvexError } from "convex/values";
 
-const VOYAGE_URL = "https://api.voyageai.com/v1/embeddings";
 export const EMBED_MODEL = "voyage-4-lite";
 export const EMBED_DIMENSIONS = 1024;
 const BATCH_SIZE = 128;
 const TIMEOUT_MS = 20000;
+
+// Keys made on the Voyage dashboard use api.voyageai.com. Keys made in
+// MongoDB Atlas start with "al-" and use ai.mongodb.com (al-eu-/al-us- keys
+// use the regional host). VOYAGE_BASE_URL overrides this.
+function embeddingsUrl(apiKey: string): string {
+  const override = process.env.VOYAGE_BASE_URL;
+  if (override) return override;
+  if (apiKey.startsWith("al-eu-")) return "https://eu.ai.mongodb.com/v1/embeddings";
+  if (apiKey.startsWith("al-us-")) return "https://us.ai.mongodb.com/v1/embeddings";
+  if (apiKey.startsWith("al-")) return "https://ai.mongodb.com/v1/embeddings";
+  return "https://api.voyageai.com/v1/embeddings";
+}
 
 async function embedBatch(
   texts: string[],
@@ -15,7 +26,7 @@ async function embedBatch(
   for (let attempt = 0; attempt < 2; attempt++) {
     let res: Response;
     try {
-      res = await fetch(VOYAGE_URL, {
+      res = await fetch(embeddingsUrl(apiKey), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -34,7 +45,11 @@ async function embedBatch(
       throw new ConvexError("Embedding service is unreachable");
     }
     lastStatus = res.status;
-    if (res.status === 429 || res.status >= 500) continue;
+    if (res.status === 429 || res.status >= 500) {
+      // Short pause before the one retry; a hard rate cap won't clear in 2s.
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      continue;
+    }
     if (res.status === 401 || res.status === 403) {
       throw new ConvexError("Embedding key was rejected");
     }
@@ -63,7 +78,11 @@ async function embedBatch(
       return e as number[];
     });
   }
-  throw new ConvexError(`Embedding service unavailable (${lastStatus || "no response"})`);
+  throw new ConvexError(
+    lastStatus === 429
+      ? "Embedding service is rate limited"
+      : `Embedding service unavailable (${lastStatus || "no response"})`,
+  );
 }
 
 // Use "document" for stored passages and "query" for questions.
